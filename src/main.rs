@@ -32,7 +32,7 @@ fn main() {
         let q = mysql_conn.prep_exec("SELECT id, message, channel, time, `interval`, webhook FROM reminders WHERE time < :t", params!{"t" => seconds}).unwrap();
 
         for res in q {
-            let (id, message, channel, time, interval, webhook) = mysql::from_row::<(u32, String, u64, u32, Option<u32>, Option<String>)>(res.unwrap());
+            let (id, message, channel, mut time, interval, webhook) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>)>(res.unwrap());
 
             let mut req;
 
@@ -52,12 +52,21 @@ fn main() {
             }
 
             let c = mysql_conn.clone();
+            let t = seconds;
             pool.execute(move || {
                 match req.send() {
                     Err(_) => {},
 
                     Ok(_) => {
-                        let _ = c.prep_exec("DELETE FROM reminders WHERE id = :id", params!{"id" => id});
+                        if let Some(interval_e) = interval {
+                            while time < t {
+                                time += interval_e as u64;
+                            }
+                            let _ = c.prep_exec("UPDATE reminders SET time = :t WHERE id = :id", params!{"t" => time, "id" => id});
+                        }
+                        else {
+                            let _ = c.prep_exec("DELETE FROM reminders WHERE id = :id", params!{"id" => id});
+                        }
                     }
                 }
             });
