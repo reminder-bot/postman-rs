@@ -4,7 +4,6 @@ extern crate dotenv;
 extern crate reqwest;
 extern crate threadpool;
 
-use std::collections::HashMap;
 use std::env;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
@@ -29,26 +28,36 @@ fn main() {
         let since_epoch = start.duration_since(UNIX_EPOCH).expect("Time went in reverse?????");
         let seconds = since_epoch.as_secs();
 
-        let q = mysql_conn.prep_exec("SELECT id, message, channel, time, `interval`, webhook FROM reminders WHERE time < :t", params!{"t" => seconds}).unwrap();
+        let q = mysql_conn.prep_exec("SELECT id, message, channel, time, `interval`, webhook, embed FROM reminders WHERE time < :t", params!{"t" => seconds}).unwrap();
 
         for res in q {
-            let (id, message, channel, mut time, interval, webhook) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>)>(res.unwrap());
+            let (id, message, channel, mut time, interval, webhook, color) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, Option<u32>)>(res.unwrap());
 
             let mut req;
 
             if let Some(url) = webhook {
-                let mut m = HashMap::new();
-                m.insert("content", message);
-                m.insert("username", String::from("Reminder"));
-                m.insert("avatar_url", String::from("https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg"));
+                let mut m;
 
-                req = send(url, &m, &token, &req_client);
+                if let Some(color_int) = color {
+                    m = format!("{{\"embeds\":[{{\"description\":\"{}\",\"color\":{}}}]}}", message, color_int);
+                }
+                else {
+                    m = format!("{{\"content\":\"{}\", \"username\":\"Reminder\", \"avatar_url\": \"https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg\"}}", message);
+                }
+
+                req = send(url, m, &token, &req_client);
             }
             else {
-                let mut m = HashMap::new();
-                m.insert("content", message);
+                let mut m;
 
-                req = send(format!("{}/channels/{}/messages", URL, channel), &m, &token, &req_client);
+                if let Some(color_int) = color {
+                    m = format!("{{\"embed\": {{\"description\":\"{}\",\"color\":{}}}}}", message, color_int);
+                }
+                else {
+                    m = format!("{{\"content\":\"{}\"}}", message);
+                }
+
+                req = send(format!("{}/channels/{}/messages", URL, channel), m, &token, &req_client);
             }
 
             let c = mysql_conn.clone();
@@ -57,7 +66,7 @@ fn main() {
                 match req.send() {
                     Err(_) => {},
 
-                    Ok(_) => {
+                    Ok(mut r) => {
                         if let Some(interval_e) = interval {
                             while time < t {
                                 time += interval_e as u64;
@@ -76,9 +85,9 @@ fn main() {
     }
 }
 
-fn send(url: String, m: &HashMap<&str, String>, token: &str, client: &reqwest::Client) -> reqwest::RequestBuilder {
+fn send(url: String, m: String, token: &str, client: &reqwest::Client) -> reqwest::RequestBuilder {
     client.post(&url)
-        .json(m)
+        .body(m)
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bot {}", token))
 }
