@@ -24,6 +24,8 @@ fn main() {
     let pool = threadpool::ThreadPool::new(threads);
 
     loop {
+        pool.join();
+        
         let start = SystemTime::now();
         let since_epoch = start.duration_since(UNIX_EPOCH).expect("Time went in reverse?????");
         let seconds = since_epoch.as_secs();
@@ -66,7 +68,7 @@ fn main() {
                 match req.send() {
                     Err(_) => {},
 
-                    Ok(mut r) => {
+                    Ok(_) => {
                         if let Some(interval_e) = interval {
                             while time < t {
                                 time += interval_e as u64;
