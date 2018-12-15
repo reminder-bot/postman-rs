@@ -25,7 +25,7 @@ fn main() {
 
     loop {
         pool.join();
-        
+
         let start = SystemTime::now();
         let since_epoch = start.duration_since(UNIX_EPOCH).expect("Time went in reverse?????");
         let seconds = since_epoch.as_secs();
@@ -41,10 +41,10 @@ fn main() {
                 let mut m;
 
                 if let Some(color_int) = color {
-                    m = format!("{{\"embeds\":[{{\"description\":\"{}\",\"color\":{}}}]}}", message, color_int);
+                    m = format!("{{\"embeds\":[{{\"description\":\"{}\",\"color\":{}}}],\"username\":\"Reminder\",\"avatar_url\":\"https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg\"}}", message, color_int);
                 }
                 else {
-                    m = format!("{{\"content\":\"{}\", \"username\":\"Reminder\", \"avatar_url\": \"https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg\"}}", message);
+                    m = format!("{{\"content\":\"{}\",\"username\":\"Reminder\",\"avatar_url\":\"https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg\"}}", message);
                 }
 
                 req = send(url, m, &token, &req_client);
@@ -53,7 +53,7 @@ fn main() {
                 let mut m;
 
                 if let Some(color_int) = color {
-                    m = format!("{{\"embed\": {{\"description\":\"{}\",\"color\":{}}}}}", message, color_int);
+                    m = format!("{{\"embed\":{{\"description\":\"{}\",\"color\":{}}}}}", message, color_int);
                 }
                 else {
                     m = format!("{{\"content\":\"{}\"}}", message);
