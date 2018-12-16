@@ -33,7 +33,9 @@ fn main() {
         let q = mysql_conn.prep_exec("SELECT id, message, channel, time, `interval`, webhook, embed FROM reminders WHERE time < :t", params!{"t" => seconds}).unwrap();
 
         for res in q {
-            let (id, message, channel, mut time, interval, webhook, color) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, Option<u32>)>(res.unwrap());
+            let (id, mut message, channel, mut time, interval, webhook, color) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, Option<u32>)>(res.unwrap());
+
+            message = message.replace("\n", "\\n");
 
             let mut req;
 
@@ -41,10 +43,10 @@ fn main() {
                 let mut m;
 
                 if let Some(color_int) = color {
-                    m = format!("{{\"embeds\":[{{\"description\":\"{}\",\"color\":{}}}],\"username\":\"Reminder\",\"avatar_url\":\"https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg\"}}", message, color_int);
+                    m = format!(r#"{{"embeds":[{{"description":"{}","color":{}}}],"username":"Reminder","avatar_url":"https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg"}}"#, message, color_int);
                 }
                 else {
-                    m = format!("{{\"content\":\"{}\",\"username\":\"Reminder\",\"avatar_url\":\"https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg\"}}", message);
+                    m = format!(r#"{{"content":"{}","username":"Reminder","avatar_url":"https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg"}}"#, message);
                 }
 
                 req = send(url, m, &token, &req_client);
@@ -53,10 +55,10 @@ fn main() {
                 let mut m;
 
                 if let Some(color_int) = color {
-                    m = format!("{{\"embed\":{{\"description\":\"{}\",\"color\":{}}}}}", message, color_int);
+                    m = format!(r#"{{"embed":{{"description":"{}","color":{}}}}}"#, message, color_int);
                 }
                 else {
-                    m = format!("{{\"content\":\"{}\"}}", message);
+                    m = format!(r#"{{"content":"{}"}}"#, message);
                 }
 
                 req = send(format!("{}/channels/{}/messages", URL, channel), m, &token, &req_client);
