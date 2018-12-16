@@ -66,9 +66,13 @@ fn main() {
             let t = seconds;
             pool.execute(move || {
                 match req.send() {
-                    Err(_) => {},
+                    Err(e) => {
+                        println!("{:?}", e);
+                    },
 
-                    Ok(_) => {
+                    Ok(r) => {
+                        println!("{:?}", r);
+
                         if let Some(interval_e) = interval {
                             while time < t {
                                 time += interval_e as u64;
