@@ -98,7 +98,7 @@ fn main() {
                 req = send(format!("{}/channels/{}/messages", URL, channel), serde_json::to_string(&m).unwrap(), &token, &req_client);
             }
 
-            let c = mysql_conn.clone();
+            let mut c = mysql_conn.get_conn().unwrap();
             pool.execute(move || {
                 match req.send() {
                     Err(e) => {
@@ -113,10 +113,10 @@ fn main() {
                             while time < seconds {
                                 time += interval_e as u64;
                             }
-                            let _ = c.prep_exec("UPDATE reminders SET time = :t WHERE id = :id", params!{"t" => time, "id" => id});
+                            c.prep_exec("UPDATE reminders SET time = :t WHERE id = :id", params!{"t" => time, "id" => id}).unwrap();
                         }
                         else {
-                            let _ = c.prep_exec("DELETE FROM reminders WHERE id = :id", params!{"id" => id});
+                            c.prep_exec("DELETE FROM reminders WHERE id = :id", params!{"id" => id}).unwrap();
                         }
                     }
                 }
