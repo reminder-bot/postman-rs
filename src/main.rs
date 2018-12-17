@@ -3,11 +3,34 @@
 extern crate dotenv;
 extern crate reqwest;
 extern crate threadpool;
+extern crate serde;
+extern crate serde_json;
+extern crate serde_derive;
 
 use std::env;
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::time::Duration;
+use serde_derive::{Deserialize, Serialize};
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Message {
+    content: String,
+    embed: Option<Embed>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Webhook {
+    content: String,
+    username: String,
+    avatar_url: String,
+    embeds: Vec<Embed>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Embed {
+    description: String,
+    color: u32,
+}
 
 fn main() {
     dotenv::dotenv().ok();
@@ -26,16 +49,11 @@ fn main() {
     loop {
         pool.join();
 
-        let start = SystemTime::now();
-        let since_epoch = start.duration_since(UNIX_EPOCH).expect("Time went in reverse?????");
-        let seconds = since_epoch.as_secs();
-
-        let q = mysql_conn.prep_exec("SELECT id, message, channel, time, `interval`, webhook, embed FROM reminders WHERE time < :t", params!{"t" => seconds}).unwrap();
+        let mut my = mysql_conn.get_conn().unwrap().unwrap();
+        let q = my.query("SELECT id, message, channel, time, `interval`, webhook, embed, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP()").unwrap();
 
         for res in q {
-            let (id, mut message, channel, mut time, interval, webhook, color) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, Option<u32>)>(res.unwrap());
-
-            message = message.replace("\n", "\\n");
+            let (id, mut message, channel, mut time, interval, webhook, color, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, Option<u32>, u64)>(res.unwrap());
 
             let mut req;
 
@@ -43,40 +61,56 @@ fn main() {
                 let mut m;
 
                 if let Some(color_int) = color {
-                    m = format!(r#"{{"embeds":[{{"description":"{}","color":{}}}],"username":"Reminder","avatar_url":"https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg"}}"#, message, color_int);
+                    m = Webhook {
+                        content: String::new(),
+                        username: String::from("Reminder"),
+                        avatar_url: String::from("https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg"),
+                        embeds: vec![Embed { description: message, color: color_int }]
+                    };
                 }
                 else {
-                    m = format!(r#"{{"content":"{}","username":"Reminder","avatar_url":"https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg"}}"#, message);
+                    m = Webhook {
+                        content: message,
+                        username: String::from("Reminder"),
+                        avatar_url: String::from("https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg"),
+                        embeds: vec![]
+                    };
                 }
 
-                req = send(url, m, &token, &req_client);
+                req = send(url, serde_json::to_string(&m).unwrap(), &token, &req_client);
             }
             else {
                 let mut m;
 
                 if let Some(color_int) = color {
-                    m = format!(r#"{{"embed":{{"description":"{}","color":{}}}}}"#, message, color_int);
+                    m = Message {
+                        content: String::new(),
+                        embed: Some(Embed { description: message, color: color_int }),
+                    };
                 }
                 else {
-                    m = format!(r#"{{"content":"{}"}}"#, message);
+                    m = Message {
+                        content: message,
+                        embed: None
+                    };
                 }
 
-                req = send(format!("{}/channels/{}/messages", URL, channel), m, &token, &req_client);
+                req = send(format!("{}/channels/{}/messages", URL, channel), serde_json::to_string(&m).unwrap(), &token, &req_client);
             }
 
             let c = mysql_conn.clone();
-            let t = seconds;
             pool.execute(move || {
                 match req.send() {
                     Err(e) => {
                         println!("{:?}", e);
                     },
 
-                    Ok(r) => {
+                    Ok(mut r) => {
                         println!("{:?}", r);
+                        println!("{:?}", r.text());
 
                         if let Some(interval_e) = interval {
-                            while time < t {
+                            while time < seconds {
                                 time += interval_e as u64;
                             }
                             let _ = c.prep_exec("UPDATE reminders SET time = :t WHERE id = :id", params!{"t" => time, "id" => id});
