@@ -50,10 +50,10 @@ fn main() {
         pool.join();
 
         let mut my = mysql_conn.get_conn().unwrap().unwrap();
-        let q = my.query("SELECT id, message, channel, time, `interval`, webhook, embed, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP()").unwrap();
+        let q = my.query("SELECT id, message, channel, time, `interval`, webhook, username, avatar, embed, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP()").unwrap();
 
         for res in q {
-            let (id, mut message, channel, mut time, interval, webhook, color, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, Option<u32>, u64)>(res.unwrap());
+            let (id, mut message, channel, mut time, interval, webhook, username, avatar, color, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, Option<String>, Option<String>, Option<u32>, u64)>(res.unwrap());
 
             let mut req;
 
@@ -63,16 +63,16 @@ fn main() {
                 if let Some(color_int) = color {
                     m = Webhook {
                         content: String::new(),
-                        username: String::from("Reminder"),
-                        avatar_url: String::from("https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg"),
+                        username: username.unwrap_or(String::from("Reminder")),
+                        avatar_url: avatar.unwrap_or(String::from("https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg")),
                         embeds: vec![Embed { description: message, color: color_int }]
                     };
                 }
                 else {
                     m = Webhook {
                         content: message,
-                        username: String::from("Reminder"),
-                        avatar_url: String::from("https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg"),
+                        username: username.unwrap_or(String::from("Reminder")),
+                        avatar_url: avatar.unwrap_or(String::from("https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg")),
                         embeds: vec![]
                     };
                 }
