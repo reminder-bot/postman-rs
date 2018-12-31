@@ -50,7 +50,7 @@ fn main() {
         pool.join();
 
         let mut my = mysql_conn.get_conn().unwrap().unwrap();
-        let q = my.query("SELECT id, message, channel, time, `interval`, webhook, username, avatar, embed, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP()").unwrap();
+        let q = my.query("SELECT id, message, channel, time, `interval`, webhook, username, avatar, embed, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP() AND time >= 0").unwrap();
 
         for res in q {
             let (id, mut message, channel, mut time, interval, webhook, username, avatar, color, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, Option<String>, Option<String>, Option<u32>, u64)>(res.unwrap());
@@ -116,7 +116,7 @@ fn main() {
                             c.prep_exec("UPDATE reminders SET time = :t WHERE id = :id", params!{"t" => time, "id" => id}).unwrap();
                         }
                         else {
-                            c.prep_exec("DELETE FROM reminders WHERE id = :id", params!{"id" => id}).unwrap();
+                            c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => id}).unwrap();
                         }
                     }
                 }
