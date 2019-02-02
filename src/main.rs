@@ -50,10 +50,10 @@ fn main() {
         pool.join();
 
         let mut my = mysql_conn.get_conn().unwrap().unwrap();
-        let q = my.query("SELECT id, message, channel, time, `interval`, webhook, username, avatar, embed, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP() AND time >= 0").unwrap();
+        let q = my.query("SELECT id, message, channel, time, position, webhook, username, avatar, embed, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP() AND time >= 0").unwrap();
 
         for res in q {
-            let (id, mut message, channel, mut time, interval, webhook, username, avatar, color, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, Option<String>, Option<String>, Option<u32>, u64)>(res.unwrap());
+            let (id, mut message, channel, mut time, position, webhook, username, avatar, color, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u8>, Option<String>, String, String, Option<u32>, u64)>(res.unwrap());
 
             let mut req;
 
@@ -63,16 +63,16 @@ fn main() {
                 if let Some(color_int) = color {
                     m = Webhook {
                         content: String::new(),
-                        username: username.unwrap_or(String::from("Reminder")),
-                        avatar_url: avatar.unwrap_or(String::from("https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg")),
+                        username: username,
+                        avatar_url: avatar,
                         embeds: vec![Embed { description: message, color: color_int }]
                     };
                 }
                 else {
                     m = Webhook {
                         content: message,
-                        username: username.unwrap_or(String::from("Reminder")),
-                        avatar_url: avatar.unwrap_or(String::from("https://raw.githubusercontent.com/reminder-bot/logos/master/Remind_Me_Bot_Logo_PPic.jpg")),
+                        username: username,
+                        avatar_url: avatar,
                         embeds: vec![]
                     };
                 }
@@ -98,7 +98,7 @@ fn main() {
                 req = send(format!("{}/channels/{}/messages", URL, channel), serde_json::to_string(&m).unwrap(), &token, &req_client);
             }
 
-            let mut c = mysql_conn.get_conn().unwrap();
+            let mut c = mysql_conn.clone();
             pool.execute(move || {
                 match req.send() {
                     Err(e) => {
@@ -109,14 +109,39 @@ fn main() {
                         println!("{:?}", r);
                         println!("{:?}", r.text());
 
-                        if let Some(interval_e) = interval {
-                            while time < seconds {
-                                time += interval_e as u64;
+                        match position {
+                            Some(pos) => {
+                                let mut maxq = c.prep_exec("SELECT COUNT(*) FROM intervals WHERE reminder = :id", params!{"id" => id}).unwrap();
+
+                                match maxq.next() {
+                                    Some(row) => {
+                                        let max = mysql::from_row::<(u8)>(row.unwrap());
+
+                                        if max > 0 {
+                                            while time < seconds {
+                                                let mut q = c.prep_exec("SELECT (period) FROM intervals WHERE reminder = :id AND position = :p", params!{"id" => id, "p" => pos % max}).unwrap();
+
+                                                let period = mysql::from_row::<(u64)>(q.next().unwrap().unwrap());
+                                                time += period;
+
+                                                c.prep_exec("UPDATE reminders SET position = :p, time = :t WHERE id = :id", params!{"p" => pos + 1, "t" => time, "id" => id}).unwrap();
+                                            }
+                                        }
+                                        else {
+                                            c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => id}).unwrap();
+                                        }
+                                    },
+
+                                    None => {
+                                        c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => id}).unwrap();
+                                    },
+                                }
+
+                            },
+
+                            None => {
+                                c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
                             }
-                            c.prep_exec("UPDATE reminders SET time = :t WHERE id = :id", params!{"t" => time, "id" => id}).unwrap();
-                        }
-                        else {
-                            c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => id}).unwrap();
                         }
                     }
                 }
