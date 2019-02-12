@@ -106,8 +106,6 @@ fn main() {
                     },
 
                     Ok(mut r) => {
-                        println!("{:?}", r);
-                        println!("{:?}", r.text());
 
                         match position {
                             Some(pos) => {
@@ -128,11 +126,13 @@ fn main() {
                                             }
                                         }
                                         else {
+                                            println!("Error: position specified but no interval found at location");
                                             c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => id}).unwrap();
                                         }
                                     },
 
                                     None => {
+                                        println!("Error: position specified but no interval found at location");
                                         c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => id}).unwrap();
                                     },
                                 }
