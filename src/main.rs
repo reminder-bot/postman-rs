@@ -105,7 +105,7 @@ fn main() {
                         println!("{:?}", e);
                     },
 
-                    Ok(mut r) => {
+                    Ok(_) => {
 
                         match position {
                             Some(pos) => {
