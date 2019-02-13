@@ -109,34 +109,21 @@ fn main() {
 
                         match position {
                             Some(pos) => {
-                                let mut maxq = c.prep_exec("SELECT COUNT(*) FROM intervals WHERE reminder = :id", params!{"id" => id}).unwrap();
+                                while time < seconds {
+                                    let mut q = c.prep_exec("SELECT i.period FROM intervals i, reminders r WHERE i.reminder = :id AND i.position = r.position MOD (SELECT COUNT(*) FROM intervals WHERE reminder = :id)", params!{"id" => id}).unwrap();
 
-                                match maxq.next() {
-                                    Some(row) => {
-                                        let max = mysql::from_row::<(u8)>(row.unwrap());
+                                    if let Some(row) = q.next() {
+                                        let period = mysql::from_row::<(u64)>(row.unwrap());
+                                        time += period;
+                                        
+                                        c.prep_exec("UPDATE reminders SET position = :p, time = :t WHERE id = :id", params!{"p" => pos + 1, "t" => time, "id" => id}).unwrap();
+                                    }
+                                    else {
+                                        println!("Error occured at 122");
 
-                                        if max > 0 {
-                                            while time < seconds {
-                                                let mut q = c.prep_exec("SELECT (period) FROM intervals WHERE reminder = :id AND position = :p", params!{"id" => id, "p" => pos % max}).unwrap();
-
-                                                let period = mysql::from_row::<(u64)>(q.next().unwrap().unwrap());
-                                                time += period;
-
-                                                c.prep_exec("UPDATE reminders SET position = :p, time = :t WHERE id = :id", params!{"p" => pos + 1, "t" => time, "id" => id}).unwrap();
-                                            }
-                                        }
-                                        else {
-                                            println!("Error: position specified but no interval found at location");
-                                            c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => id}).unwrap();
-                                        }
-                                    },
-
-                                    None => {
-                                        println!("Error: position specified but no interval found at location");
-                                        c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => id}).unwrap();
-                                    },
+                                        c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
+                                    }
                                 }
-
                             },
 
                             None => {
