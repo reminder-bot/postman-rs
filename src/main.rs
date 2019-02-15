@@ -57,7 +57,9 @@ fn main() {
 
             let mut req;
 
-            if let Some(url) = webhook {
+            let w = if webhook.is_none() || !webhook.clone().unwrap().starts_with("https") { None } else { webhook };
+
+            if let Some(url) = w {
                 let mut m;
 
                 if let Some(color_int) = color {
@@ -103,31 +105,37 @@ fn main() {
                 match req.send() {
                     Err(e) => {
                         println!("{:?}", e);
+                        println!("{} {}", id, channel);
                     },
 
-                    Ok(_) => {
+                    Ok(res) => {
 
-                        match position {
-                            Some(pos) => {
-                                while time < seconds {
-                                    let mut q = c.prep_exec("SELECT i.period FROM intervals i, reminders r WHERE i.reminder = :id AND i.position = r.position MOD (SELECT COUNT(*) FROM intervals WHERE reminder = :id)", params!{"id" => id}).unwrap();
+                        if [404, 403].contains(&res.status().as_u16()) {
+                            c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
+                        }
+                        else {
+                            match position {
+                                Some(pos) => {
+                                    while time < seconds {
+                                        let mut q = c.prep_exec("SELECT i.period FROM intervals i, reminders r WHERE i.reminder = :id AND i.position = r.position MOD (SELECT COUNT(*) FROM intervals WHERE reminder = :id)", params!{"id" => id}).unwrap();
 
-                                    if let Some(row) = q.next() {
-                                        let period = mysql::from_row::<(u64)>(row.unwrap());
-                                        time += period;
-                                        
-                                        c.prep_exec("UPDATE reminders SET position = :p, time = :t WHERE id = :id", params!{"p" => pos + 1, "t" => time, "id" => id}).unwrap();
+                                        if let Some(row) = q.next() {
+                                            let period = mysql::from_row::<(u64)>(row.unwrap());
+                                            time += period;
+                                            
+                                            c.prep_exec("UPDATE reminders SET position = :p, time = :t WHERE id = :id", params!{"p" => pos + 1, "t" => time, "id" => id}).unwrap();
+                                        }
+                                        else {
+                                            println!("Error occured at 122");
+
+                                            c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
+                                        }
                                     }
-                                    else {
-                                        println!("Error occured at 122");
+                                },
 
-                                        c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
-                                    }
-                                }
-                            },
-
-                            None => {
-                                c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
+                                None => {
+                                    c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
+                                },
                             }
                         }
                     }
