@@ -120,7 +120,7 @@ fn main() {
                                         let mut q = c.prep_exec("SELECT i.period FROM intervals i, reminders r WHERE i.reminder = :id AND i.position = r.position MOD (SELECT COUNT(*) FROM intervals WHERE reminder = :id)", params!{"id" => id}).unwrap();
 
                                         if let Some(row) = q.next() {
-                                            let period = mysql::from_row::<(u32)>(row.unwrap());
+                                            let period = mysql::from_row::<(u64)>(row.unwrap());
                                             time += period;
                                             
                                             c.prep_exec("UPDATE reminders SET position = :p, time = :t WHERE id = :id", params!{"p" => pos + 1, "t" => time, "id" => id}).unwrap();
