@@ -110,7 +110,7 @@ fn main() {
 
                     Ok(res) => {
 
-                        if [404, 403].contains(&res.status().as_u16()) {
+                        if res.status().as_u16() > 299 {
                             c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
                         }
                         else {
@@ -118,8 +118,18 @@ fn main() {
                                 Some(_) => {
                                     let mut reset = false;
 
+                                    // new_time = current_time + interval - ((current_time - old_time) % interval)
+
                                     while time < seconds {
-                                        let mut q = c.prep_exec("SELECT i.period FROM intervals i, reminders r WHERE i.reminder = :id AND i.position = r.position MOD (SELECT COUNT(*) FROM intervals WHERE reminder = :id)", params!{"id" => id}).unwrap();
+                                        let mut q = c.prep_exec(r#"
+                                        SELECT i.period 
+                                            FROM intervals i, reminders r
+                                            WHERE 
+                                                i.reminder = :id AND
+                                                i.position = r.position MOD (
+                                                    SELECT COUNT(*) FROM intervals WHERE reminder = :id
+                                                )"#
+                                            , params!{"id" => id}).unwrap();
 
                                         if let Some(row) = q.next() {
                                             let period = mysql::from_row::<(u64)>(row.unwrap());
