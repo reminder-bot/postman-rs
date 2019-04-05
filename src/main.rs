@@ -43,12 +43,13 @@ fn main() {
     const URL: &str = "https://discordapp.com/api/v6";
 
     let mysql_conn = mysql::Pool::new(sql_url).unwrap();
-    let req_client = reqwest::Client::new();
+    let req_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap();
     let pool = threadpool::ThreadPool::new(threads);
 
     loop {
-        pool.join();
-
         let mut my = mysql_conn.get_conn().unwrap().unwrap();
         let q = my.query("SELECT id, message, channel, time, position, webhook, username, avatar, embed, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP() AND time >= 0").unwrap();
 
@@ -117,8 +118,6 @@ fn main() {
                             match position {
                                 Some(_) => {
                                     let mut reset = false;
-
-                                    // new_time = current_time + interval - ((current_time - old_time) % interval)
 
                                     while time < seconds {
                                         let mut q = c.prep_exec(r#"
