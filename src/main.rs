@@ -51,10 +51,10 @@ fn main() {
 
     loop {
         let mut my = mysql_conn.get_conn().unwrap().unwrap();
-        let q = my.query("SELECT id, message, channel, time, position, webhook, username, avatar, embed, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP() AND time >= 0").unwrap();
+        let q = my.query("SELECT id, message, channel, time, position, webhook, username, avatar, embed, enabled, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP() AND time >= 0").unwrap();
 
         for res in q {
-            let (id, mut message, channel, mut time, position, webhook, username, avatar, color, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, String, String, Option<u32>, u64)>(res.unwrap());
+            let (id, mut message, channel, mut time, position, webhook, username, avatar, color, enabled, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, String, String, Option<u32>, bool, u64)>(res.unwrap());
 
             let mut req;
 
@@ -101,66 +101,63 @@ fn main() {
                 req = send(format!("{}/channels/{}/messages", URL, channel), serde_json::to_string(&m).unwrap(), &token, &req_client);
             }
 
-            let mut c = mysql_conn.clone();
-            pool.execute(move || {
-                match req.send() {
-                    Err(e) => {
-                        println!("{:?}", e);
-                        println!("{} {}", id, channel);
-                    },
+            match position {
+                Some(_) => {
+                    let mut reset = false;
 
-                    Ok(res) => {
+                    while time < seconds {
+                        let mut q = mysql_conn.prep_exec(r#"
+                        SELECT i.period 
+                            FROM intervals i, reminders r
+                            WHERE 
+                                i.reminder = :id AND
+                                i.position = r.position MOD (
+                                    SELECT COUNT(*) FROM intervals WHERE reminder = :id
+                                )"#
+                            , params!{"id" => id}).unwrap();
 
-                        if res.status().as_u16() > 299 {
-                            c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
+                        if let Some(row) = q.next() {
+                            let period = mysql::from_row::<(u64)>(row.unwrap());
+                            time += period;
+                            
+                            mysql_conn.prep_exec("UPDATE reminders SET position = (position + 1) MOD (SELECT COUNT(*) FROM intervals WHERE reminder = :id), time = :t WHERE id = :id", params!{"t" => time, "id" => id}).unwrap();
+                        }
+                        else if !reset {
+                            mysql_conn.prep_exec("UPDATE reminders SET position = 0 WHERE id = :id", params!{"id" => &id}).unwrap();
+
+                            reset = true;
                         }
                         else {
-                            match position {
-                                Some(_) => {
-                                    let mut reset = false;
+                            mysql_conn.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
 
-                                    while time < seconds {
-                                        let mut q = c.prep_exec(r#"
-                                        SELECT i.period 
-                                            FROM intervals i, reminders r
-                                            WHERE 
-                                                i.reminder = :id AND
-                                                i.position = r.position MOD (
-                                                    SELECT COUNT(*) FROM intervals WHERE reminder = :id
-                                                )"#
-                                            , params!{"id" => id}).unwrap();
+                            break;
+                        }
+                    }
+                },
 
-                                        if let Some(row) = q.next() {
-                                            let period = mysql::from_row::<(u64)>(row.unwrap());
-                                            time += period;
-                                            
-                                            c.prep_exec("UPDATE reminders SET position = (position + 1) MOD (SELECT COUNT(*) FROM intervals WHERE reminder = :id), time = :t WHERE id = :id", params!{"t" => time, "id" => id}).unwrap();
-                                        }
-                                        else if !reset {
-                                            println!("position fallen back");
+                None => {
+                    mysql_conn.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
+                },
+            }
 
-                                            c.prep_exec("UPDATE reminders SET position = 0 WHERE id = :id", params!{"id" => &id}).unwrap();
+            if enabled {
+                let mut c = mysql_conn.clone();
+                pool.execute(move || {
+                    match req.send() {
+                        Err(e) => {
+                            println!("{:?}", e);
+                            println!("{} {}", id, channel);
+                        },
 
-                                            reset = true;
-                                        }
-                                        else {
-                                            println!("interval gone");
-                                            
-                                            c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
+                        Ok(res) => {
 
-                                            break;
-                                        }
-                                    }
-                                },
-
-                                None => {
-                                    c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
-                                },
+                            if res.status().as_u16() > 299 {
+                                c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
                             }
                         }
                     }
-                }
-            });
+                });
+            }
         }
 
         thread::sleep(Duration::from_secs(interval));
