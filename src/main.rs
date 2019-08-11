@@ -80,7 +80,7 @@ fn main() {
                     };
                 }
 
-                req = send(url, serde_json::to_string(&m).unwrap(), &token, &req_client);
+                req = send(url, serde_json::to_string(&m).unwrap(), None, &req_client);
             }
             else {
                 let mut m;
@@ -98,7 +98,7 @@ fn main() {
                     };
                 }
 
-                req = send(format!("{}/channels/{}/messages", URL, channel), serde_json::to_string(&m).unwrap(), &token, &req_client);
+                req = send(format!("{}/channels/{}/messages", URL, channel), serde_json::to_string(&m).unwrap(), Some(&token), &req_client);
             }
 
             match position {
@@ -150,8 +150,9 @@ fn main() {
                         },
 
                         Ok(res) => {
+                            let status: u16 = res.status().as_u16();
 
-                            if res.status().as_u16() > 299 {
+                            if status > 299 && status != 429 {
                                 c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
                             }
                         }
@@ -164,9 +165,19 @@ fn main() {
     }
 }
 
-fn send(url: String, m: String, token: &str, client: &reqwest::Client) -> reqwest::RequestBuilder {
-    client.post(&url)
-        .body(m)
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bot {}", token))
+fn send(url: String, m: String, token: Option<&str>, client: &reqwest::Client) -> reqwest::RequestBuilder {
+    match token {
+        Some(t) => {
+            client.post(&url)
+                .body(m)
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bot {}", t))
+        }
+
+        None => {
+            client.post(&url)
+                .body(m)
+                .header("Content-Type", "application/json")
+        }
+    }
 }
