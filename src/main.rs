@@ -51,10 +51,10 @@ fn main() {
 
     loop {
         let mut my = mysql_conn.get_conn().unwrap().unwrap();
-        let q = my.query("SELECT id, message, channel, time, position, webhook, username, avatar, embed, enabled, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP() AND time >= 0").unwrap();
+        let q = my.query("SELECT id, message, channel, time, interval, webhook, username, avatar, embed, enabled, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP() AND time >= 0").unwrap();
 
         for res in q {
-            let (id, message, channel, mut time, position, webhook, username, avatar, color, enabled, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, String, String, Option<u32>, bool, u64)>(res.unwrap());
+            let (id, message, channel, mut time, interval, webhook, username, avatar, color, enabled, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, String, String, Option<u32>, bool, u64)>(res.unwrap());
 
             let req;
 
@@ -101,39 +101,14 @@ fn main() {
                 req = send(format!("{}/channels/{}/messages", URL, channel), serde_json::to_string(&m).unwrap(), Some(&token), &req_client);
             }
 
-            match position {
-                Some(_) => {
-                    let mut reset = false;
+            match interval {
+                Some(i) => {
 
                     while time < seconds {
-                        let mut q = mysql_conn.prep_exec(r#"
-                        SELECT i.period 
-                            FROM intervals i, reminders r
-                            WHERE 
-                                i.reminder = :id AND
-                                i.position = r.position MOD (
-                                    SELECT COUNT(*) FROM intervals WHERE reminder = :id
-                                )"#
-                            , params!{"id" => id}).unwrap();
-
-                        if let Some(row) = q.next() {
-                            let period = mysql::from_row::<(u64)>(row.unwrap());
-                            time += period;
-                            
-                            mysql_conn.prep_exec("UPDATE reminders SET position = (position + 1) MOD (SELECT COUNT(*) FROM intervals WHERE reminder = :id), time = :t WHERE id = :id", params!{"t" => time, "id" => id}).unwrap();
-                        }
-                        else if !reset {
-                            mysql_conn.prep_exec("UPDATE reminders SET position = 0 WHERE id = :id", params!{"id" => &id}).unwrap();
-
-                            reset = true;
-                        }
-                        else {
-                            println!("Reminder {} removed with no intervals", id);
-                            mysql_conn.prep_exec("DELETE FROM reminders WHERE id = :id", params!{"id" => &id}).unwrap();
-
-                            break;
-                        }
+                        time += i as u64;
                     }
+
+                    mysql_conn.prep_exec("UPDATE reminders SET time = :t WHERE id = :id", params!{"t" => time, "id" => id}).unwrap();
                 },
 
                 None => {
