@@ -54,14 +54,14 @@ fn main() {
         let q = my.query("SELECT id, message, channel, time, position, webhook, username, avatar, embed, enabled, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP() AND time >= 0").unwrap();
 
         for res in q {
-            let (id, mut message, channel, mut time, position, webhook, username, avatar, color, enabled, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, String, String, Option<u32>, bool, u64)>(res.unwrap());
+            let (id, message, channel, mut time, position, webhook, username, avatar, color, enabled, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, String, String, Option<u32>, bool, u64)>(res.unwrap());
 
-            let mut req;
+            let req;
 
             let w = if webhook.is_none() || !webhook.clone().unwrap().starts_with("https") { None } else { webhook };
 
             if let Some(url) = w {
-                let mut m;
+                let m;
 
                 if let Some(color_int) = color {
                     m = Webhook {
@@ -83,8 +83,8 @@ fn main() {
                 req = send(url, serde_json::to_string(&m).unwrap(), None, &req_client);
             }
             else {
-                let mut m;
-
+                let m;
+    
                 if let Some(color_int) = color {
                     m = Message {
                         content: String::new(),
@@ -128,7 +128,8 @@ fn main() {
                             reset = true;
                         }
                         else {
-                            mysql_conn.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
+                            println!("Reminder {} removed with no intervals", id);
+                            mysql_conn.prep_exec("DELETE FROM reminders WHERE id = :id", params!{"id" => &id}).unwrap();
 
                             break;
                         }
@@ -136,12 +137,12 @@ fn main() {
                 },
 
                 None => {
-                    mysql_conn.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
+                    mysql_conn.prep_exec("DELETE FROM reminders WHERE id = :id", params!{"id" => &id}).unwrap();
                 },
             }
 
             if enabled {
-                let mut c = mysql_conn.clone();
+                let c = mysql_conn.clone();
                 pool.execute(move || {
                     match req.send() {
                         Err(e) => {
@@ -153,7 +154,8 @@ fn main() {
                             let status: u16 = res.status().as_u16();
 
                             if status > 299 && status != 429 {
-                                c.prep_exec("DELETE FROM reminders WHERE id = :id OR time < 0", params!{"id" => &id}).unwrap();
+                                println!("Reminder {} removed with status code {}", id, status);
+                                c.prep_exec("DELETE FROM reminders WHERE id = :id", params!{"id" => &id}).unwrap();
                             }
                         }
                     }
