@@ -51,7 +51,7 @@ fn main() {
 
     loop {
         let mut my = mysql_conn.get_conn().unwrap().unwrap();
-        let q = my.query("SELECT id, message, channel, time, interval, webhook, username, avatar, embed, enabled, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP() AND time >= 0").unwrap();
+        let q = my.query("SELECT id, message, channel, time, `interval`, webhook, username, avatar, embed, enabled, UNIX_TIMESTAMP() FROM reminders WHERE time < UNIX_TIMESTAMP() AND time >= 0").unwrap();
 
         for res in q {
             let (id, message, channel, mut time, interval, webhook, username, avatar, color, enabled, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, String, String, Option<u32>, bool, u64)>(res.unwrap());
