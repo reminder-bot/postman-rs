@@ -55,6 +55,7 @@ fn main() {
 
         for res in q {
             let (id, message, channel, mut time, interval, webhook, username, avatar, color, enabled, seconds) = mysql::from_row::<(u32, String, u64, u64, Option<u32>, Option<String>, String, String, Option<u32>, bool, u64)>(res.unwrap());
+            let m_e = message.clone();
 
             let req;
 
@@ -129,7 +130,7 @@ fn main() {
                             let status: u16 = res.status().as_u16();
 
                             if status > 299 && status != 429 {
-                                println!("Reminder {} removed with status code {}", id, status);
+                                println!("Reminder {} (message {}) removed with status code {}", id, m_e, status);
                                 c.prep_exec("DELETE FROM reminders WHERE id = :id", params!{"id" => &id}).unwrap();
                             }
                         }
