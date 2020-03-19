@@ -2,12 +2,13 @@
 name = "postman"
 version = "0.1.0"
 authors = ["jude-LafiteIII <judewrs@gmail.com>"]
+edition = "2018"
 
 [dependencies]
-reqwest = "0.9.1"
-mysql = "14.2"
+reqwest = "0.10.4"
 dotenv = "0.9.0"
-threadpool = "*"
-serde = "*"
-serde_json = "*"
-serde_derive = "*"
+serde = "1.0.80"
+serde_json = "1.0.33"
+serde_derive = "1.0.82"
+diesel = { version = "1.0.0", features = ["mysql"] }
+tokio = { version = "0.2", features = ["macros"] }
