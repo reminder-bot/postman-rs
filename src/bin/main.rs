@@ -4,51 +4,24 @@ extern crate dotenv;
 extern crate reqwest;
 extern crate serde;
 extern crate serde_json;
-extern crate serde_derive;
 
 use std::env;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use serde_derive::{Deserialize, Serialize};
 
 use self::postman::*;
 use self::models::*;
 use self::diesel::prelude::*;
+use self::model_traits::{ReminderContent};
 
-/*
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Message {
-    content: String,
-    embed: Option<Embed>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Webhook {
-    content: String,
-    username: String,
-    avatar_url: String,
-    embeds: Vec<Embed>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Embed {
-    title: String,
-    description: String,
-    color: u32,
-}
-*/
 
 #[tokio::main]
-async fn main() -> Result<(), reqwest::Error> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
 
-    let token = env::var("DISCORD_TOKEN").unwrap();
     let refresh_interval = env::var("INTERVAL").unwrap().parse::<u64>().unwrap();
-    let threads = env::var("THREADS").unwrap().parse::<usize>().unwrap();
 
     let connection = establish_connection();
-
-    const URL: &str = "https://discordapp.com/api/v6";
 
     let reqwest_client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
@@ -66,35 +39,28 @@ async fn main() -> Result<(), reqwest::Error> {
 
         for reminder in results {
 
-            // Sending straight to webhook
-            if let Some(webhook_url) = reminder.webhook {
+            reminder.create_sendable(&connection).send(&reqwest_client).await?;
 
+            if let Some(reminder_interval) = reminder.interval {
+                let mut reminder_time = reminder.time;
+                while reminder_time < current_time as u32 {
+                    reminder_time += reminder_interval;
+                }
+
+                diesel::update(reminders.find(reminder.id))
+                    .set(time.eq(reminder_time))
+                    .execute(&connection)
+                    .expect("Failed to update time of interval.");
             }
 
-            // Sending to channel
             else {
-
+                diesel::delete(reminders.find(reminder.id))
+                    .execute(&connection)
+                    .expect("Failed to delete expired reminder.");
             }
 
         }
 
         thread::sleep(Duration::from_secs(refresh_interval));
-    }
-}
-
-fn send(url: String, m: String, token: Option<&str>, client: &reqwest::Client) -> reqwest::RequestBuilder {
-    match token {
-        Some(t) => {
-            client.post(&url)
-                .body(m)
-                .header("Content-Type", "application/json")
-                .header("Authorization", format!("Bot {}", t))
-        }
-
-        None => {
-            client.post(&url)
-                .body(m)
-                .header("Content-Type", "application/json")
-        }
     }
 }

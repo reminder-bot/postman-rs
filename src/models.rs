@@ -1,4 +1,27 @@
-#[derive(Queryable)]
+use crate::schema::{embeds, messages, reminders};
+
+#[derive(Identifiable, Queryable, Serialize)]
+#[table_name = "embeds"]
+pub struct Embed {
+    #[serde(skip)]
+    pub id: u32,
+
+    pub title: String,
+    pub description: String,
+    pub color: u32,
+}
+
+#[derive(Identifiable, Queryable)]
+#[table_name = "messages"]
+pub struct Message {
+    pub id: u32,
+
+    pub content: String,
+    pub embed_id: Option<u32>,
+}
+
+#[derive(Identifiable, Queryable)]
+#[table_name = "reminders"]
 pub struct Reminder {
     pub id: u32,
     pub uid: String,
@@ -15,22 +38,5 @@ pub struct Reminder {
     pub avatar: String,
     pub username: String,
 
-    pub method: String,
-}
-
-#[derive(Queryable)]
-pub struct Message {
-    pub id: u32,
-
-    pub content: String,
-    pub embed: Option<u32>,
-}
-
-#[derive(Queryable)]
-pub struct Embed {
-    pub id: u32,
-
-    pub title: String,
-    pub description: String,
-    pub color: u32,
+    pub method: Option<String>,
 }

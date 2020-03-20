@@ -15,7 +15,7 @@ table! {
         avatar -> VarChar,
         username -> VarChar,
 
-        method -> VarChar,
+        method -> Nullable<VarChar>,
     }
 }
 
@@ -24,7 +24,7 @@ table! {
         id -> Unsigned<Integer>,
 
         content -> VarChar,
-        embed -> Nullable<Integer>,
+        embed_id -> Nullable<Unsigned<Integer>>,
     }
 }
 
@@ -34,6 +34,6 @@ table! {
 
         title -> VarChar,
         description -> VarChar,
-        color -> VarChar,
+        color -> Unsigned<Integer>,
     }
 }
