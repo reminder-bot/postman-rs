@@ -56,12 +56,12 @@ impl SendableMessage {
 }
 
 pub trait ReminderContent {
-    fn create_sendable(&self, connection: &MysqlConnection) -> (SendableMessage, Option<u32>, u32);
+    fn create_sendable(&self, connection: &MysqlConnection) -> SendableMessage;
 }
 
 impl ReminderContent for Reminder {
 
-    fn create_sendable(&self, connection: &MysqlConnection) -> (SendableMessage, Option<u32>, u32) {
+    fn create_sendable(&self, connection: &MysqlConnection) -> SendableMessage {
         let message;
         let mut embed_handle: Option<Embed> = None;
 
@@ -87,8 +87,6 @@ impl ReminderContent for Reminder {
             }
         }
 
-        let s;
-
         if self.is_going_to_webhook() {
             let mut embeds_vector: Option<Vec<Embed>> = None;
 
@@ -96,13 +94,11 @@ impl ReminderContent for Reminder {
                 embeds_vector = Some(vec![embedded_content]);
             }
 
-            s = SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embeds: embeds_vector, embed: None };
+            SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embeds: embeds_vector, embed: None }
         }
         else {
-            s = SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embeds: None, embed: embed_handle };
+            SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embeds: None, embed: embed_handle }
         }
-
-        return (s, message.embed_id, message.id)
     }
 }
 
