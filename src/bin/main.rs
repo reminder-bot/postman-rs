@@ -39,7 +39,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         for reminder in results {
 
-            reminder.create_sendable(&connection).send(&reqwest_client).await?;
+            if reminder.enabled {
+                reminder.create_sendable(&connection).send(&reqwest_client).await?;
+            }
 
             if let Some(reminder_interval) = reminder.interval {
                 let mut reminder_time = reminder.time;
