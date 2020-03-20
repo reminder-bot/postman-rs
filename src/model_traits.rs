@@ -41,7 +41,7 @@ impl SendableMessage {
                 client.post(&self.url)
                     .body(serde_json::to_string(self)?)
                     .header("Content-Type", "application/json")
-                    .header("Authorization", auth)
+                    .header("Authorization", format!("Bot {}", auth))
             },
 
             None => {
@@ -52,17 +52,16 @@ impl SendableMessage {
         }.send().await?;
 
         Ok(())
-
     }
 }
 
 pub trait ReminderContent {
-    fn create_sendable(&self, connection: &MysqlConnection) -> SendableMessage;
+    fn create_sendable(&self, connection: &MysqlConnection) -> (SendableMessage, Option<u32>, u32);
 }
 
 impl ReminderContent for Reminder {
 
-    fn create_sendable(&self, connection: &MysqlConnection) -> SendableMessage {
+    fn create_sendable(&self, connection: &MysqlConnection) -> (SendableMessage, Option<u32>, u32) {
         let message;
         let mut embed_handle: Option<Embed> = None;
 
@@ -88,6 +87,8 @@ impl ReminderContent for Reminder {
             }
         }
 
+        let s;
+
         if self.is_going_to_webhook() {
             let mut embeds_vector: Option<Vec<Embed>> = None;
 
@@ -95,11 +96,13 @@ impl ReminderContent for Reminder {
                 embeds_vector = Some(vec![embedded_content]);
             }
 
-            SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embeds: embeds_vector, embed: None }
+            s = SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embeds: embeds_vector, embed: None };
         }
         else {
-            SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embeds: None, embed: embed_handle }
+            s = SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embeds: None, embed: embed_handle };
         }
+
+        return (s, message.embed_id, message.id)
     }
 }
 
