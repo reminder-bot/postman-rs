@@ -19,6 +19,9 @@ pub struct SendableMessage {
     embed: Option<Embed>,
     #[serde(skip_serializing_if = "Option::is_none")]
     embeds: Option<Vec<Embed>>,
+
+    avatar_url: Option<String>,
+    username: Option<String>,
 }
 
 impl Default for SendableMessage {
@@ -29,6 +32,8 @@ impl Default for SendableMessage {
             content: String::new(),
             embed: None,
             embeds: None,
+            avatar_url: None,
+            username: Some(String::from("Reminder")),
         }
     }
 }
@@ -94,10 +99,10 @@ impl ReminderContent for Reminder {
                 embeds_vector = Some(vec![embedded_content]);
             }
 
-            SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embeds: embeds_vector, embed: None }
+            SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embeds: embeds_vector, embed: None, avatar_url: Some(self.avatar.clone()), username: Some(self.username.clone()) }
         }
         else {
-            SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embeds: None, embed: embed_handle }
+            SendableMessage { url: self.get_url(), authorization: self.get_authorization(), content: message.content, embed: embed_handle, ..Default::default() }
         }
     }
 }

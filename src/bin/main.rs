@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if let Some(reminder_interval) = reminder.interval {
                 let mut reminder_time = reminder.time;
-                while reminder_time < current_time as u32 {
+                while reminder_time <= current_time as u32 {
                     reminder_time += reminder_interval;
                 }
 
