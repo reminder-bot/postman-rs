@@ -5,8 +5,8 @@ table! {
 
         message_id -> Unsigned<Integer>,
 
-        channel -> Unsigned<BigInt>,
-        webhook -> Nullable<VarChar>,
+        channel_id -> Nullable<Unsigned<Integer>>,
+        user_id -> Nullable<Unsigned<Integer>>,
 
         time -> Unsigned<Integer>,
         interval -> Nullable<Unsigned<Integer>>,
@@ -35,5 +35,37 @@ table! {
         title -> VarChar,
         description -> VarChar,
         color -> Unsigned<Integer>,
+    }
+}
+
+table! {
+    channels (id) {
+        id -> Unsigned<Integer>,
+        channel -> Unsigned<BigInt>,
+
+        nudge -> SmallInt,
+        blacklisted -> Bool,
+
+        name -> Nullable<VarChar>,
+
+        webhook_id -> Nullable<Unsigned<BigInt>>,
+        webhook_token -> Nullable<VarChar>,
+
+        guild_id -> Unsigned<Integer>,
+    }
+}
+
+table! {
+    users (id) {
+        id -> Unsigned<Integer>,
+        user -> Unsigned<BigInt>,
+        name -> VarChar,
+
+        language -> VarChar,
+        timezone -> Nullable<VarChar>,
+        allowed_dm -> Bool,
+
+        patreon -> Bool,
+        dm_channel -> Unsigned<BigInt>,
     }
 }

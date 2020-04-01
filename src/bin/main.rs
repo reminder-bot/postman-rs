@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use self::postman::*;
 use self::models::*;
 use self::diesel::prelude::*;
-use self::model_traits::{ReminderContent};
+use self::model_traits::{ReminderContent, ReminderDetails};
 
 use dotenv::dotenv;
 
@@ -39,10 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .load::<Reminder>(&connection)
             .expect("Error loading reminders.");
 
-        for reminder in results {
+        for reminder_wrapper in results.iter().map(|r| { ReminderDetails::create_from_reminder(r, &connection) }) {
+            let reminder = &reminder_wrapper.reminder;
 
-            if reminder.enabled {
-                reminder.create_sendable(&connection).send(&reqwest_client).await?;
+            if reminder_wrapper.reminder.enabled {
+                reminder_wrapper.create_sendable(&connection).send(&reqwest_client).await?;
             }
 
             if let Some(reminder_interval) = reminder.interval {
