@@ -182,6 +182,9 @@ impl ApiCommunicable for ReminderDetails<'_> {
             let c = self.channel.as_ref().unwrap();
             format!("https://discordapp.com/api/webhooks/{}/{}", c.webhook_id.as_ref().unwrap(), c.webhook_token.as_ref().unwrap())
         }
+        else if let Some(channel) = &self.channel {
+            format!("https://discordapp.com/api/v6/channels/{}/messages", channel.channel)
+        }
         else if let Some(user) = &self.user {
             format!("https://discordapp.com/api/v6/channels/{}/messages", user.dm_channel)
         }
