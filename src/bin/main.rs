@@ -8,11 +8,13 @@ extern crate serde_json;
 use std::env;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use reqwest::StatusCode;
 
 use self::postman::*;
 use self::models::*;
 use self::diesel::prelude::*;
 use self::model_traits::{ReminderContent, ReminderDetails};
+use self::postman::model_traits::ApiCommunicable;
 
 use dotenv::dotenv;
 
@@ -31,6 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to make a reqwest client");
 
     use postman::schema::reminders::dsl::*;
+    use postman::schema::channels::dsl::*;
 
     loop {
         let current_time = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time has reversed.").as_secs();
@@ -43,7 +46,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let reminder = &reminder_wrapper.reminder;
 
             if reminder_wrapper.reminder.enabled {
-                reminder_wrapper.create_sendable(&connection).send(&reqwest_client).await?;
+                let status_code = reminder_wrapper.create_sendable(&connection).send(&reqwest_client).await?;
+
+                if status_code == StatusCode::NOT_FOUND {
+                    if reminder_wrapper.is_going_to_webhook() {
+
+                        let reminder_channel = reminder_wrapper.channel.unwrap();
+
+                        diesel::update(channels.find(reminder_channel.id))
+                            .set((webhook_id.eq::<Option<u64>>(None), webhook_token.eq::<Option<String>>(None)))
+                            .execute(&connection)
+                            .expect("Failed to remove webhook token and ID from 404 reminder");
+                    }
+                }
+                else if reminder.interval.is_some() &&  !status_code.is_success() {
+                    diesel::delete(reminders.find(reminder.id))
+                        .execute(&connection)
+                        .expect("Failed to delete failing interval");
+                }
             }
 
             if let Some(reminder_interval) = reminder.interval {

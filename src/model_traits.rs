@@ -39,9 +39,9 @@ impl Default for SendableMessage {
 }
 
 impl SendableMessage {
-    pub async fn send(&self, client: &Client) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn send(&self, client: &Client) -> Result<reqwest::StatusCode, Box<dyn std::error::Error>> {
 
-        match &self.authorization {
+        let response = match &self.authorization {
             Some(auth) => {
                 client.post(&self.url)
                     .body(serde_json::to_string(self)?)
@@ -56,12 +56,12 @@ impl SendableMessage {
             }
         }.send().await?;
 
-        Ok(())
+        Ok(response.status())
     }
 }
 
 pub struct ReminderDetails<'a> {
-    channel: Option<Channel>,
+    pub channel: Option<Channel>,
     user: Option<User>,
 
     pub reminder: &'a Reminder,
