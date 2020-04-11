@@ -1,4 +1,4 @@
-use crate::models::{Message, Embed, Reminder, Channel, User};
+use crate::models::{Message, Embed, Reminder, Channel};
 use crate::DISCORD_TOKEN;
 use diesel::mysql::MysqlConnection;
 use reqwest::Client;
@@ -61,35 +61,25 @@ impl SendableMessage {
 }
 
 pub struct ReminderDetails<'a> {
-    pub channel: Option<Channel>,
-    user: Option<User>,
+    pub channel: Channel,
 
     pub reminder: &'a Reminder,
 }
 
 impl<'a> ReminderDetails<'a> {
     pub fn create_from_reminder(reminder: &'a Reminder, connection: &MysqlConnection) -> ReminderDetails<'a> {
-        let mut reminder_channel: Option<Channel> = None;
-        let mut reminder_user: Option<User> = None;
+        let reminder_channel: Channel;
 
-        if let Some(channel_id) = reminder.channel_id {
+        {
             use crate::schema::channels::dsl::*;
 
-            reminder_channel = channels.find(channel_id)
+            reminder_channel = channels.find(reminder.channel_id)
                 .load::<Channel>(connection)
                 .expect("Couldn't get reminder channel")
-                .pop();
-        }
-        else {
-            use crate::schema::users::dsl::*;
-
-            reminder_user = users.find(reminder.user_id.unwrap())
-                .load::<User>(connection)
-                .expect("Couldn't get reminder user")
-                .pop();
+                .pop().expect("No reminder channel found (violated Ref Integrity)");
         }
 
-        ReminderDetails { reminder, channel: reminder_channel, user: reminder_user }
+        ReminderDetails { reminder, channel: reminder_channel }
     }
 }
 
@@ -165,31 +155,17 @@ pub trait ApiCommunicable {
 impl ApiCommunicable for ReminderDetails<'_> {
 
     fn is_going_to_webhook(&self) -> bool {
-        match &self.channel {
-            Some(channel) => {
-                channel.webhook_id.is_some() && channel.webhook_token.is_some()
-            }
-
-            None => {
-                false
-            }
-        }
+        self.channel.webhook_id.is_some() && self.channel.webhook_token.is_some()
     }
 
     fn get_url(&self) -> String {
 
         if self.is_going_to_webhook() {
-            let c = self.channel.as_ref().unwrap();
+            let c = &self.channel;
             format!("https://discordapp.com/api/webhooks/{}/{}", c.webhook_id.as_ref().unwrap(), c.webhook_token.as_ref().unwrap())
         }
-        else if let Some(channel) = &self.channel {
-            format!("https://discordapp.com/api/v6/channels/{}/messages", channel.channel)
-        }
-        else if let Some(user) = &self.user {
-            format!("https://discordapp.com/api/v6/channels/{}/messages", user.dm_channel)
-        }
         else {
-            panic!("Reminder found with neither channel nor user specified");
+            format!("https://discordapp.com/api/v6/channels/{}/messages", self.channel.channel)
         }
     }
 

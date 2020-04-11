@@ -1,4 +1,4 @@
-use crate::schema::{embeds, messages, reminders, channels, users};
+use crate::schema::{embeds, messages, reminders, channels};
 
 #[derive(Identifiable, Queryable, Serialize)]
 #[table_name = "embeds"]
@@ -28,8 +28,7 @@ pub struct Reminder {
 
     pub message_id: u32,
 
-    pub channel_id: Option<u32>,
-    pub user_id: Option<u32>,
+    pub channel_id: u32,
 
     pub time: u32,
     pub interval: Option<u32>,
@@ -56,21 +55,4 @@ pub struct Channel {
     pub webhook_token: Option<String>,
 
     pub guild_id: u32,
-}
-
-#[derive(Identifiable, Queryable)]
-#[table_name = "users"]
-pub struct User {
-    pub id: u32,
-    pub user: u64,
-
-    pub name: String,
-
-    pub language: String,
-    pub timezone: Option<String>,
-    pub allowed_dm: bool,
-
-    pub patreon: bool,
-
-    pub dm_channel: u64,
 }

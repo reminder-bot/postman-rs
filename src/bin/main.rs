@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if status_code == StatusCode::NOT_FOUND {
                     if reminder_wrapper.is_going_to_webhook() {
 
-                        let reminder_channel = reminder_wrapper.channel.unwrap();
+                        let reminder_channel = reminder_wrapper.channel;
 
                         diesel::update(channels.find(reminder_channel.id))
                             .set((webhook_id.eq::<Option<u64>>(None), webhook_token.eq::<Option<String>>(None)))

@@ -5,8 +5,7 @@ table! {
 
         message_id -> Unsigned<Integer>,
 
-        channel_id -> Nullable<Unsigned<Integer>>,
-        user_id -> Nullable<Unsigned<Integer>>,
+        channel_id -> Unsigned<Integer>,
 
         time -> Unsigned<Integer>,
         interval -> Nullable<Unsigned<Integer>>,
@@ -52,20 +51,5 @@ table! {
         webhook_token -> Nullable<VarChar>,
 
         guild_id -> Unsigned<Integer>,
-    }
-}
-
-table! {
-    users (id) {
-        id -> Unsigned<Integer>,
-        user -> Unsigned<BigInt>,
-        name -> VarChar,
-
-        language -> VarChar,
-        timezone -> Nullable<VarChar>,
-        allowed_dm -> Bool,
-
-        patreon -> Bool,
-        dm_channel -> Unsigned<BigInt>,
     }
 }
