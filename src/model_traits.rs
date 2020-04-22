@@ -58,9 +58,9 @@ impl SendableMessage {
 
             let form = multipart::Form::new()
                 .text("payload_json", json)
-                .part("file", multipart::Part::stream(attachment).file_name(name));
+                .part("file", multipart::Part::bytes(attachment).file_name(name));
 
-            return Ok(form)
+            Ok(form)
         }
         else {
             let form = multipart::Form::new()
