@@ -22,8 +22,12 @@ table! {
     messages (id) {
         id -> Unsigned<Integer>,
 
-        content -> VarChar,
+        content ->  VarChar,
+        tts -> Bool,
         embed_id -> Nullable<Unsigned<Integer>>,
+
+        attachment -> Nullable<Binary>,
+        attachment_name -> Nullable<VarChar>,
     }
 }
 
@@ -50,6 +54,6 @@ table! {
         webhook_id -> Nullable<Unsigned<BigInt>>,
         webhook_token -> Nullable<VarChar>,
 
-        guild_id -> Unsigned<Integer>,
+        guild_id -> Nullable<Unsigned<Integer>>,
     }
 }

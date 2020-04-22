@@ -17,7 +17,11 @@ pub struct Message {
     pub id: u32,
 
     pub content: String,
+    pub tts: bool,
     pub embed_id: Option<u32>,
+
+    pub attachment: Option<Vec<u8>>,
+    pub attachment_name: Option<String>
 }
 
 #[derive(Identifiable, Queryable)]
@@ -54,5 +58,5 @@ pub struct Channel {
     pub webhook_id: Option<u64>,
     pub webhook_token: Option<String>,
 
-    pub guild_id: u32,
+    pub guild_id: Option<u32>,
 }
