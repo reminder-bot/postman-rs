@@ -16,9 +16,9 @@ pub struct SendableMessage {
     content: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    embed: Option<Embed>,
+    embed: Option<SendableEmbed>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    embeds: Option<Vec<Embed>>,
+    embeds: Option<Vec<SendableEmbed>>,
 
     tts: bool,
 
@@ -93,6 +93,35 @@ impl SendableMessage {
     }
 }
 
+#[derive(Serialize)]
+pub struct Footer {
+    pub text: String,
+    pub icon_url: String,
+}
+
+#[derive(Serialize)]
+pub struct SendableEmbed {
+    pub title: String,
+    pub description: String,
+    pub footer: Footer,
+
+    pub color: u32,
+}
+
+impl SendableEmbed {
+    pub fn from_embed(embed: Embed) -> Self {
+        return SendableEmbed {
+            title: embed.title,
+            description: embed.description,
+            footer: Footer {
+                text: embed.footer,
+                icon_url: embed.footer_icon,
+            },
+            color: embed.color,
+        }
+    }
+}
+
 pub struct ReminderDetails<'a> {
     pub channel: Channel,
 
@@ -148,10 +177,12 @@ impl ReminderContent for ReminderDetails<'_> {
             }
         }
 
-        if self.is_going_to_webhook() {
-            let mut embeds_vector: Option<Vec<Embed>> = None;
+        let sendable_embed_handle = embed_handle.map(|e| SendableEmbed::from_embed(e));
 
-            if let Some(embedded_content) = embed_handle {
+        if self.is_going_to_webhook() {
+            let mut embeds_vector: Option<Vec<SendableEmbed>> = None;
+
+            if let Some(embedded_content) = sendable_embed_handle {
                 embeds_vector = Some(vec![embedded_content]);
             }
 
@@ -173,7 +204,7 @@ impl ReminderContent for ReminderDetails<'_> {
                 url: self.get_url(),
                 authorization: self.get_authorization(),
                 content: message.content,
-                embed: embed_handle,
+                embed: sendable_embed_handle,
                 tts: message.tts,
                 attachment: message.attachment,
                 attachment_name: message.attachment_name,

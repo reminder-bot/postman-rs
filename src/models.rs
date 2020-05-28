@@ -1,13 +1,15 @@
 use crate::schema::{embeds, messages, reminders, channels};
 
-#[derive(Identifiable, Queryable, Serialize)]
+#[derive(Identifiable, Queryable)]
 #[table_name = "embeds"]
 pub struct Embed {
-    #[serde(skip)]
     pub id: u32,
 
     pub title: String,
     pub description: String,
+    pub footer: String,
+    pub footer_icon: String,
+
     pub color: u32,
 }
 

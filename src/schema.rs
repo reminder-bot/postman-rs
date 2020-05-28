@@ -37,6 +37,9 @@ table! {
 
         title -> VarChar,
         description -> VarChar,
+        footer -> VarChar,
+        footer_icon -> VarChar,
+
         color -> Unsigned<Integer>,
     }
 }
