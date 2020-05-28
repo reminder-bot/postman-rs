@@ -7,7 +7,7 @@ pub struct Embed {
 
     pub title: String,
     pub description: String,
-    pub footer: String,
+    pub footer: Option<String>,
     pub footer_icon: Option<String>,
 
     pub color: u32,

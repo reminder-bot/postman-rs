@@ -96,7 +96,7 @@ impl SendableMessage {
 #[derive(Serialize)]
 pub struct Footer {
     pub text: String,
-    pub icon_url: String,
+    pub icon_url: Option<String>,
 }
 
 #[derive(Serialize)]
