@@ -1,4 +1,5 @@
 use crate::schema::{embeds, messages, reminders, channels};
+use chrono::NaiveDateTime;
 
 #[derive(Identifiable, Queryable)]
 #[table_name = "embeds"]
@@ -59,6 +60,9 @@ pub struct Channel {
 
     pub webhook_id: Option<u64>,
     pub webhook_token: Option<String>,
+
+    pub paused: bool,
+    pub paused_until: Option<NaiveDateTime>,
 
     pub guild_id: Option<u32>,
 }

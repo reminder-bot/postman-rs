@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         for reminder_wrapper in results.iter().map(|r| { ReminderDetails::create_from_reminder(r, &connection) }) {
             let reminder = &reminder_wrapper.reminder;
 
-            if reminder_wrapper.reminder.enabled {
+            if reminder_wrapper.should_send(&connection) {
                 let status_code = reminder_wrapper.create_sendable(&connection).send(&reqwest_client).await?;
 
                 if status_code == StatusCode::NOT_FOUND {

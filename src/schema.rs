@@ -57,6 +57,9 @@ table! {
         webhook_id -> Nullable<Unsigned<BigInt>>,
         webhook_token -> Nullable<VarChar>,
 
+        paused -> Bool,
+        paused_until -> Nullable<Timestamp>,
+
         guild_id -> Nullable<Unsigned<Integer>>,
     }
 }

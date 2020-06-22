@@ -1,10 +1,14 @@
 use crate::models::{Message, Embed, Reminder, Channel};
 use crate::DISCORD_TOKEN;
-use diesel::mysql::MysqlConnection;
-use reqwest::{Client, multipart};
 use crate::diesel::prelude::*;
 
+use diesel::mysql::MysqlConnection;
+
+use reqwest::{Client, multipart};
+
 use serde::{Serialize};
+
+use chrono::{NaiveDateTime, Utc};
 
 #[derive(Serialize)]
 pub struct SendableMessage {
@@ -142,6 +146,43 @@ impl<'a> ReminderDetails<'a> {
         }
 
         ReminderDetails { reminder, channel: reminder_channel }
+    }
+
+    pub fn should_send(&self, connection: &MysqlConnection) -> bool {
+        if !self.reminder.enabled {
+            false
+        }
+        else {
+            // reminder is enabled
+            if !self.channel.paused {
+                // channel is enabled
+                true
+            }
+            else {
+                // channel is disabled
+                if let Some(paused_until_time) = self.channel.paused_until {
+                    if paused_until_time < Utc::now().naive_utc() {
+                        // the time that this channel was set to pause until has passed
+                        use crate::schema::channels::dsl::*;
+
+                        diesel::update(channels.find(self.channel.id))
+                            .set((paused.eq::<bool>(false), paused_until.eq::<Option<NaiveDateTime>>(None)))
+                            .execute(connection)
+                            .expect("Failed to remove webhook token and ID from 404 reminder");
+
+                        true
+                    }
+                    else {
+                        // channel should still be paused
+                        false
+                    }
+                }
+                else {
+                    // channel is disabled indefinitely
+                    false
+                }
+            }
+        }
     }
 }
 
