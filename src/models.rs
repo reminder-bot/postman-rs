@@ -8,6 +8,9 @@ pub struct Embed {
 
     pub title: String,
     pub description: String,
+
+    pub image_url: Option<String>,
+
     pub footer: String,
     pub footer_icon: Option<String>,
 

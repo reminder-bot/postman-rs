@@ -104,9 +104,15 @@ pub struct Footer {
 }
 
 #[derive(Serialize)]
+pub struct Image {
+    pub url: Option<String>,
+}
+
+#[derive(Serialize)]
 pub struct SendableEmbed {
     pub title: String,
     pub description: String,
+    pub image: Image,
     pub footer: Footer,
 
     pub color: u32,
@@ -117,6 +123,9 @@ impl SendableEmbed {
         return SendableEmbed {
             title: embed.title,
             description: embed.description,
+            image: Image {
+                url: embed.image_url,
+            },
             footer: Footer {
                 text: embed.footer,
                 icon_url: embed.footer_icon,
