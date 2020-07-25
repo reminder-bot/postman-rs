@@ -10,6 +10,7 @@ pub struct Embed {
     pub description: String,
 
     pub image_url: Option<String>,
+    pub thumbnail_url: Option<String>,
 
     pub footer: String,
     pub footer_icon: Option<String>,

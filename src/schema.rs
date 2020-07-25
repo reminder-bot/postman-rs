@@ -39,6 +39,7 @@ table! {
         description -> VarChar,
 
         image_url -> Nullable<VarChar>,
+        thumbnail_url -> Nullable<VarChar>,
 
         footer -> VarChar,
         footer_icon -> Nullable<VarChar>,
