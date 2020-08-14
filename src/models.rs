@@ -1,4 +1,4 @@
-use crate::schema::{embeds, messages, reminders, channels};
+use crate::schema::{embeds, embed_fields, messages, reminders, channels};
 use chrono::NaiveDateTime;
 
 #[derive(Identifiable, Queryable)]
@@ -16,6 +16,19 @@ pub struct Embed {
     pub footer_icon: Option<String>,
 
     pub color: u32,
+}
+
+#[derive(Identifiable, Queryable)]
+#[table_name = "embed_fields"]
+pub struct EmbedField {
+    pub id: u32,
+
+    pub title: String,
+    pub value: String,
+
+    pub inline: bool,
+
+    pub embed_id: u32,
 }
 
 #[derive(Identifiable, Queryable)]

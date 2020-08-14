@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             .expect("Failed to remove webhook token and ID from 404 reminder");
                     }
                 }
-                else if reminder.interval.is_some() &&  !status_code.is_success() {
+                else if reminder.interval.is_some() && !status_code.is_success() {
                     diesel::delete(reminders.find(reminder.id))
                         .execute(&connection)
                         .expect("Failed to delete failing interval");

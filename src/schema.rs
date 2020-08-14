@@ -49,6 +49,19 @@ table! {
 }
 
 table! {
+    embed_fields (id) {
+        id -> Unsigned<Integer>,
+
+        title -> VarChar,
+        value -> VarChar,
+
+        inline -> Bool,
+
+        embed_id -> Unsigned<Integer>,
+    }
+}
+
+table! {
     channels (id) {
         id -> Unsigned<Integer>,
         channel -> Unsigned<BigInt>,

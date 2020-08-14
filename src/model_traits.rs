@@ -1,4 +1,4 @@
-use crate::models::{Message, Embed, Reminder, Channel};
+use crate::models::{Message, Embed, EmbedField, Reminder, Channel};
 use crate::DISCORD_TOKEN;
 use crate::diesel::prelude::*;
 
@@ -114,19 +114,38 @@ pub struct Thumbnail {
 }
 
 #[derive(Serialize)]
+pub struct SendableEmbedField {
+    pub name: String,
+    pub value: String,
+
+    pub inline: bool,
+}
+
+impl SendableEmbedField {
+    pub fn from_embed_field(embed_field: &EmbedField) -> Self {
+        return Self {
+            name: embed_field.title.clone(),
+            value: embed_field.value.clone(),
+            inline: embed_field.inline,
+        }
+    }
+}
+
+#[derive(Serialize)]
 pub struct SendableEmbed {
     pub title: String,
     pub description: String,
     pub image: Image,
     pub thumbnail: Thumbnail,
     pub footer: Footer,
+    pub fields: Vec<SendableEmbedField>,
 
     pub color: u32,
 }
 
 impl SendableEmbed {
-    pub fn from_embed(embed: Embed) -> Self {
-        return SendableEmbed {
+    pub fn from_embed(embed: Embed, embed_fields: Vec<EmbedField>) -> Self {
+        return Self {
             title: embed.title,
             description: embed.description,
             image: Image {
@@ -139,6 +158,7 @@ impl SendableEmbed {
                 text: embed.footer,
                 icon_url: embed.footer_icon,
             },
+            fields: embed_fields.iter().map(|field| { SendableEmbedField::from_embed_field(field) }).collect(),
             color: embed.color,
         }
     }
@@ -213,6 +233,7 @@ impl ReminderContent for ReminderDetails<'_> {
     fn create_sendable(&self, connection: &MysqlConnection) -> SendableMessage {
         let message;
         let mut embed_handle: Option<Embed> = None;
+        let mut embed_fields_handle: Option<Vec<EmbedField>> = None;
 
         {
             use crate::schema::messages::dsl::*;
@@ -225,18 +246,28 @@ impl ReminderContent for ReminderDetails<'_> {
 
         }
 
-        {
-            use crate::schema::embeds::dsl::*;
+        if let Some(message_embed_id) = message.embed_id {
+            {
+                use crate::schema::embeds::dsl::*;
 
-            if let Some(message_embed_id) = message.embed_id {
                 embed_handle = embeds.find(message_embed_id)
                     .load::<Embed>(connection)
                     .expect("Failed to query for reminder's message's embed.")
                     .pop();
+
+                if let Some(embed) = &embed_handle {
+                    use crate::schema::embed_fields::dsl::*;
+
+                    embed_fields_handle = Some(
+                        embed_fields.filter(embed_id.eq(embed.id))
+                            .load::<EmbedField>(connection)
+                            .expect("Failed to query for reminder's message's embed's fields.")
+                    );
+                }
             }
         }
 
-        let sendable_embed_handle = embed_handle.map(|e| SendableEmbed::from_embed(e));
+        let sendable_embed_handle = embed_handle.map(|e| SendableEmbed::from_embed(e, embed_fields_handle.unwrap()));
 
         if self.is_going_to_webhook() {
             let mut embeds_vector: Option<Vec<SendableEmbed>> = None;
