@@ -283,8 +283,8 @@ impl ReminderContent for ReminderDetails<'_> {
                 embeds: embeds_vector,
                 embed: None,
                 tts: message.tts,
-                avatar_url: Some(self.reminder.avatar.clone()),
-                username: Some(self.reminder.username.clone()),
+                avatar_url: self.reminder.avatar.clone(),
+                username: self.reminder.username.clone(),
                 attachment: message.attachment,
                 attachment_name: message.attachment_name,
             }

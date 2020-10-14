@@ -11,8 +11,8 @@ table! {
         interval -> Nullable<Unsigned<Integer>>,
         enabled -> Bool,
 
-        avatar -> VarChar,
-        username -> VarChar,
+        avatar -> Nullable<VarChar>,
+        username -> Nullable<VarChar>,
 
         method -> Nullable<VarChar>,
     }

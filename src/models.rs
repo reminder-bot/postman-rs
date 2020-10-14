@@ -58,8 +58,8 @@ pub struct Reminder {
     pub interval: Option<u32>,
     pub enabled: bool,
 
-    pub avatar: String,
-    pub username: String,
+    pub avatar: Option<String>,
+    pub username: Option<String>,
 
     pub method: Option<String>,
 }
