@@ -1,4 +1,3 @@
-mod macros;
 mod models;
 
 use log::info;
@@ -9,13 +8,25 @@ use serenity::http::Http;
 
 use dotenv::dotenv;
 
-use std::env;
+use log::warn;
+
+use std::{env, time::Duration};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     env_logger::init();
 
     dotenv()?;
+
+    let interval = env::var("INTERVAL")
+        .map(|inner| inner.parse::<u64>().ok())
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| {
+            warn!("No interval has been provided: defaulting to 10 seconds");
+
+            10
+        });
 
     let pool =
         MySqlPool::new(&env::var("DATABASE_URL").expect("Missing DATABASE_URL from environment"))
@@ -29,12 +40,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {
         let reminders = models::Reminder::fetch_reminders(&pool).await;
 
-        info!("Preparing to send {} reminders:", reminders.len());
+        if reminders.len() > 0 {
+            info!("=================================================");
+            info!("Preparing to send {} reminders:", reminders.len());
 
-        for reminder in reminders {
-            info!("\tPreparing to send {:?}", reminder);
+            for reminder in reminders {
+                info!("Sending {:?}", reminder);
 
-            reminder.send(&pool, &http).await;
+                reminder.send(&pool, &http).await;
+            }
+
+            tokio::time::delay_for(Duration::from_secs(interval)).await;
         }
     }
 }

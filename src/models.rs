@@ -5,11 +5,46 @@ use serenity::{
     model::{id::ChannelId, webhook::Webhook},
 };
 
-use crate::json;
-
 use log::warn;
 
+use serenity::builder::CreateEmbed;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+struct Embed {
+    title: String,
+    description: String,
+    image_url: Option<String>,
+    thumbnail_url: Option<String>,
+    footer: String,
+    footer_icon: Option<String>,
+    color: u32,
+}
+
+impl Embed {
+    pub async fn from_id(pool: &MySqlPool, id: u32) -> Self {
+        sqlx::query_as_unchecked!(
+            Self,
+            "
+SELECT
+    title,
+    description,
+    image_url,
+    thumbnail_url,
+    footer,
+    footer_icon,
+    color
+FROM
+    embeds
+WHERE
+    embeds.`id` = ?
+            ",
+            id
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+}
 
 #[derive(Debug)]
 pub struct Reminder {
@@ -20,6 +55,8 @@ pub struct Reminder {
     webhook_token: Option<String>,
 
     content: String,
+    tts: bool,
+    embed_id: Option<u32>,
 
     interval: Option<u32>,
     time: u32,
@@ -27,9 +64,7 @@ pub struct Reminder {
 
 impl Reminder {
     pub async fn fetch_reminders(pool: &MySqlPool) -> Vec<Self> {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-
-        sqlx::query_as!(
+        sqlx::query_as_unchecked!(
             Reminder,
             "
 SELECT
@@ -40,6 +75,8 @@ SELECT
     channels.`webhook_token` AS webhook_token,
 
     messages.`content` AS content,
+    messages.`tts` AS tts,
+    messages.`embed_id` AS embed_id,
 
     reminders.`interval` AS 'interval',
     reminders.`time` AS time
@@ -48,15 +85,15 @@ FROM
 INNER JOIN
     channels
 ON
-    reminders.id = channels.id
+    reminders.channel_id = channels.id
 INNER JOIN
     messages
 ON
     reminders.message_id = messages.id
 WHERE
-    reminders.`time` < ?
-            ",
-            now.as_secs()
+    reminders.`time` < UNIX_TIMESTAMP()
+        AND ( (NOT channels.`paused`) OR channels.`paused_until` < NOW())
+            "
         )
         .fetch_all(pool)
         .await
@@ -112,13 +149,15 @@ DELETE FROM reminders WHERE id = ?
             let channel = ChannelId(reminder.channel_id);
 
             channel
-                .send_message(&http, |m| m.content(&reminder.content))
+                .send_message(&http, |m| m.content(&reminder.content).tts(reminder.tts))
                 .await;
         }
 
         async fn send_to_webhook(http: &Http, reminder: &Reminder, webhook: Webhook) {
             webhook
-                .execute(&http, false, |w| w.content(&reminder.content))
+                .execute(&http, false, |w| {
+                    w.content(&reminder.content).tts(reminder.tts)
+                })
                 .await;
         }
 
