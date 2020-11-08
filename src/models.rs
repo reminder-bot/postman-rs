@@ -8,9 +8,15 @@ use serenity::{
 use log::warn;
 
 use serenity::builder::CreateEmbed;
+use sqlx::types::chrono::{NaiveDateTime, Utc};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 struct Embed {
+    inner: EmbedInner,
+    fields: Vec<EmbedField>,
+}
+
+struct EmbedInner {
     title: String,
     description: String,
     image_url: Option<String>,
@@ -20,10 +26,16 @@ struct Embed {
     color: u32,
 }
 
+struct EmbedField {
+    title: String,
+    value: String,
+    inline: bool,
+}
+
 impl Embed {
     pub async fn from_id(pool: &MySqlPool, id: u32) -> Self {
-        sqlx::query_as_unchecked!(
-            Self,
+        let inner = sqlx::query_as_unchecked!(
+            EmbedInner,
             "
 SELECT
     title,
@@ -40,9 +52,29 @@ WHERE
             ",
             id
         )
-        .fetch_one(pool)
+        .fetch_one(&pool.clone())
         .await
-        .unwrap()
+        .unwrap();
+
+        let fields = sqlx::query_as_unchecked!(
+            EmbedField,
+            "
+SELECT
+    title,
+    value,
+    inline
+FROM
+    embed_fields
+WHERE
+    embed_id = ?
+            ",
+            id
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap();
+
+        Embed { inner, fields }
     }
 }
 
@@ -50,24 +82,28 @@ impl Into<CreateEmbed> for Embed {
     fn into(self) -> CreateEmbed {
         let mut c = CreateEmbed::default();
 
-        c.title(&self.title)
-            .description(&self.description)
-            .color(self.color)
+        c.title(&self.inner.title)
+            .description(&self.inner.description)
+            .color(self.inner.color)
             .footer(|f| {
-                f.text(&self.footer);
+                f.text(&self.inner.footer);
 
-                if let Some(footer_icon) = &self.footer_icon {
+                if let Some(footer_icon) = &self.inner.footer_icon {
                     f.icon_url(footer_icon);
                 }
 
                 f
             });
 
-        if let Some(image_url) = &self.image_url {
+        for field in &self.fields {
+            c.field(&field.title, &field.value, field.inline);
+        }
+
+        if let Some(image_url) = &self.inner.image_url {
             c.image(image_url);
         }
 
-        if let Some(thumbnail_url) = &self.thumbnail_url {
+        if let Some(thumbnail_url) = &self.inner.thumbnail_url {
             c.thumbnail(thumbnail_url);
         }
 
@@ -82,6 +118,9 @@ pub struct Reminder {
     channel_id: u64,
     webhook_id: Option<u64>,
     webhook_token: Option<String>,
+
+    channel_paused: bool,
+    channel_paused_until: Option<NaiveDateTime>,
 
     content: String,
     tts: bool,
@@ -105,6 +144,9 @@ SELECT
     channels.`webhook_id` AS webhook_id,
     channels.`webhook_token` AS webhook_token,
 
+    channels.`paused` AS channel_paused,
+    channels.`paused_until` AS channel_paused_until,
+
     messages.`content` AS content,
     messages.`tts` AS tts,
     messages.`embed_id` AS embed_id,
@@ -125,7 +167,6 @@ ON
     reminders.message_id = messages.id
 WHERE
     reminders.`time` < UNIX_TIMESTAMP()
-        AND ( (NOT channels.`paused`) OR channels.`paused_until` < NOW())
             "
         )
         .fetch_all(pool)
@@ -168,7 +209,7 @@ UPDATE reminders SET `time` = ? WHERE `id` = ?
         } else {
             sqlx::query!(
                 "
-DELETE FROM reminders WHERE id = ?
+DELETE FROM reminders WHERE `id` = ?
                 ",
                 self.id
             )
@@ -222,25 +263,32 @@ DELETE FROM reminders WHERE id = ?
                 .await;
         }
 
-        let embed = if let Some(id) = self.embed_id {
-            Some(Embed::from_id(&pool.clone(), id).await.into())
-        } else {
-            None
-        };
-
-        if let (Some(webhook_id), Some(webhook_token)) = (self.webhook_id, &self.webhook_token) {
-            let webhook_res = http.get_webhook_with_token(webhook_id, webhook_token).await;
-
-            if let Ok(webhook) = webhook_res {
-                send_to_webhook(http, &self, webhook, embed).await;
+        if !(self.channel_paused
+            || self
+                .channel_paused_until
+                .map_or(false, |inner| inner >= Utc::now().naive_utc()))
+        {
+            let embed = if let Some(id) = self.embed_id {
+                Some(Embed::from_id(&pool.clone(), id).await.into())
             } else {
-                warn!("Webhook vanished: {:?}", webhook_res);
+                None
+            };
 
-                self.reset_webhook(&pool.clone()).await;
+            if let (Some(webhook_id), Some(webhook_token)) = (self.webhook_id, &self.webhook_token)
+            {
+                let webhook_res = http.get_webhook_with_token(webhook_id, webhook_token).await;
+
+                if let Ok(webhook) = webhook_res {
+                    send_to_webhook(http, &self, webhook, embed).await;
+                } else {
+                    warn!("Webhook vanished: {:?}", webhook_res);
+
+                    self.reset_webhook(&pool.clone()).await;
+                    send_to_channel(http, &self, embed).await;
+                }
+            } else {
                 send_to_channel(http, &self, embed).await;
             }
-        } else {
-            send_to_channel(http, &self, embed).await;
         }
 
         self.refresh(pool).await;

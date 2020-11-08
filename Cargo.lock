@@ -1334,6 +1334,7 @@ dependencies = [
  "base64 0.12.3",
  "bitflags",
  "byteorder",
+ "chrono",
  "crossbeam-queue",
  "crossbeam-utils",
  "digest 0.8.1",
