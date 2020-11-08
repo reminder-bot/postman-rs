@@ -48,27 +48,27 @@ WHERE
 
 impl Into<CreateEmbed> for Embed {
     fn into(self) -> CreateEmbed {
-        let mut c: CreateEmbed = Default::default();
+        let mut c = CreateEmbed::default();
 
-        c.title(self.title)
-            .description(self.description)
+        c.title(&self.title)
+            .description(&self.description)
             .color(self.color)
             .footer(|f| {
-                f.text(self.footer);
+                f.text(&self.footer);
 
-                if let Some(footer_icon) = self.footer_icon {
+                if let Some(footer_icon) = &self.footer_icon {
                     f.icon_url(footer_icon);
                 }
 
                 f
             });
 
-        if let Some(image_url) = self.image_url {
+        if let Some(image_url) = &self.image_url {
             c.image(image_url);
         }
 
-        if let Some(thumbnail_url) = self.thumbnail_url {
-            c.thumbnail(thumbnail_url)
+        if let Some(thumbnail_url) = &self.thumbnail_url {
+            c.thumbnail(thumbnail_url);
         }
 
         c
@@ -211,7 +211,10 @@ DELETE FROM reminders WHERE id = ?
                     w.content(&reminder.content).tts(reminder.tts);
 
                     if let Some(embed) = embed {
-                        w.embeds(vec![SerenityEmbed::fake(embed)]);
+                        w.embeds(vec![SerenityEmbed::fake(|c| {
+                            *c = embed;
+                            c
+                        })]);
                     }
 
                     w
