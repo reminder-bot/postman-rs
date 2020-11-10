@@ -5,7 +5,7 @@ use serenity::{
     model::{channel::Embed as SerenityEmbed, id::ChannelId, webhook::Webhook},
 };
 
-use log::warn;
+use log::{info, warn};
 
 use serenity::builder::CreateEmbed;
 use sqlx::types::chrono::{NaiveDateTime, Utc};
@@ -280,10 +280,19 @@ DELETE FROM reminders WHERE `id` = ?
         }
 
         if !(self.channel_paused
-            || self
+            && self
                 .channel_paused_until
-                .map_or(false, |inner| inner >= Utc::now().naive_utc()))
+                .map_or(true, |inner| inner >= Utc::now().naive_local()))
         {
+            let _ = sqlx::query!(
+                "
+UPDATE `channels` SET paused = 0, paused_until = NULL WHERE `channel` = ?
+                ",
+                self.channel_id
+            )
+            .execute(&pool.clone())
+            .await;
+
             let embed = if let Some(id) = self.embed_id {
                 Some(Embed::from_id(&pool.clone(), id).await.into())
             } else {
@@ -305,6 +314,8 @@ DELETE FROM reminders WHERE `id` = ?
             } else {
                 send_to_channel(http, &self, embed).await;
             }
+        } else {
+            info!("Reminder {} is paused", self.id);
         }
 
         self.refresh(pool).await;
