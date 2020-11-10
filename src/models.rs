@@ -175,7 +175,7 @@ WHERE
     }
 
     async fn reset_webhook(&self, pool: &MySqlPool) {
-        sqlx::query!(
+        let _ = sqlx::query!(
             "
 UPDATE channels SET webhook_id = NULL, webhook_token = NULL WHERE channel = ?
             ",
@@ -205,7 +205,8 @@ UPDATE reminders SET `time` = ? WHERE `id` = ?
                 self.id
             )
             .execute(pool)
-            .await;
+            .await
+            .expect(&format!("Could not update time on Reminder {}", self.id));
         } else {
             sqlx::query!(
                 "
@@ -214,7 +215,8 @@ DELETE FROM reminders WHERE `id` = ?
                 self.id
             )
             .execute(pool)
-            .await;
+            .await
+            .expect(&format!("Could not delete Reminder {}", self.id));
         }
     }
 
@@ -238,7 +240,11 @@ DELETE FROM reminders WHERE `id` = ?
 
                     m
                 })
-                .await;
+                .await
+                .expect(&format!(
+                    "Could not send Reminder to ChannelId: {:?}",
+                    &reminder
+                ));
         }
 
         async fn send_to_webhook(
@@ -251,6 +257,12 @@ DELETE FROM reminders WHERE `id` = ?
                 .execute(&http, false, |w| {
                     w.content(&reminder.content).tts(reminder.tts);
 
+                    if let (Some(attachment), Some(name)) =
+                        (&reminder.attachment, &reminder.attachment_name)
+                    {
+                        w.add_file((attachment as &[u8], name.as_str()));
+                    }
+
                     if let Some(embed) = embed {
                         w.embeds(vec![SerenityEmbed::fake(|c| {
                             *c = embed;
@@ -260,7 +272,11 @@ DELETE FROM reminders WHERE `id` = ?
 
                     w
                 })
-                .await;
+                .await
+                .expect(&format!(
+                    "Could not send Reminder to Webhook: {:?}",
+                    &reminder
+                ));
         }
 
         if !(self.channel_paused

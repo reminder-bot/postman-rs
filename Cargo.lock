@@ -1221,9 +1221,8 @@ dependencies = [
 
 [[package]]
 name = "serenity"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "166bf9762b5c7398f4410ff3c34fccb97fd8b8961845224bd758b3cfe0c39053"
+version = "0.9.1"
+source = "git+https://github.com/jellywx/serenity?branch=jellywx-webhook_files#df91fc0e0c3d8ab70147beeec3cc390a6e39a862"
 dependencies = [
  "async-trait",
  "async-tungstenite",
