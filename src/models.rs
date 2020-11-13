@@ -5,7 +5,7 @@ use serenity::{
     model::{channel::Embed as SerenityEmbed, id::ChannelId, webhook::Webhook},
 };
 
-use log::{info, warn};
+use log::{error, info, warn};
 
 use serenity::builder::CreateEmbed;
 use sqlx::types::chrono::{NaiveDateTime, Utc};
@@ -130,6 +130,9 @@ pub struct Reminder {
 
     interval: Option<u32>,
     time: u32,
+
+    avatar: Option<String>,
+    username: Option<String>,
 }
 
 impl Reminder {
@@ -154,7 +157,10 @@ SELECT
     messages.`attachment_name` AS attachment_name,
 
     reminders.`interval` AS 'interval',
-    reminders.`time` AS time
+    reminders.`time` AS time,
+
+    reminders.`avatar` AS avatar,
+    reminders.`username` AS username
 FROM
     reminders
 INNER JOIN
@@ -224,7 +230,7 @@ DELETE FROM reminders WHERE `id` = ?
         async fn send_to_channel(http: &Http, reminder: &Reminder, embed: Option<CreateEmbed>) {
             let channel = ChannelId(reminder.channel_id);
 
-            channel
+            let result = channel
                 .send_message(&http, |m| {
                     m.content(&reminder.content).tts(reminder.tts);
 
@@ -240,11 +246,14 @@ DELETE FROM reminders WHERE `id` = ?
 
                     m
                 })
-                .await
-                .expect(&format!(
-                    "Could not send Reminder to ChannelId: {:?}",
-                    &reminder
-                ));
+                .await;
+
+            if let Err(e) = result {
+                error!(
+                    "Could not send Reminder to ChannelId: {:?}: {:?}",
+                    &reminder, e
+                );
+            }
         }
 
         async fn send_to_webhook(
@@ -253,9 +262,17 @@ DELETE FROM reminders WHERE `id` = ?
             webhook: Webhook,
             embed: Option<CreateEmbed>,
         ) {
-            webhook
+            let result = webhook
                 .execute(&http, false, |w| {
                     w.content(&reminder.content).tts(reminder.tts);
+
+                    if let Some(username) = &reminder.username {
+                        w.username(username);
+                    }
+
+                    if let Some(avatar) = &reminder.avatar {
+                        w.avatar_url(avatar);
+                    }
 
                     if let (Some(attachment), Some(name)) =
                         (&reminder.attachment, &reminder.attachment_name)
@@ -272,11 +289,14 @@ DELETE FROM reminders WHERE `id` = ?
 
                     w
                 })
-                .await
-                .expect(&format!(
-                    "Could not send Reminder to Webhook: {:?}",
-                    &reminder
-                ));
+                .await;
+
+            if let Err(e) = result {
+                error!(
+                    "Could not send Reminder to Webhook: {:?}: {:?}",
+                    &reminder, e
+                );
+            }
         }
 
         if !(self.channel_paused
