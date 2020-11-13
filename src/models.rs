@@ -1,13 +1,14 @@
 use sqlx::MySqlPool;
 
 use serenity::{
+    builder::CreateEmbed,
     http::Http,
     model::{channel::Embed as SerenityEmbed, id::ChannelId, webhook::Webhook},
+    Result,
 };
 
 use log::{error, info, warn};
 
-use serenity::builder::CreateEmbed;
 use sqlx::types::chrono::{NaiveDateTime, Utc};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -214,23 +215,31 @@ UPDATE reminders SET `time` = ? WHERE `id` = ?
             .await
             .expect(&format!("Could not update time on Reminder {}", self.id));
         } else {
-            sqlx::query!(
-                "
-DELETE FROM reminders WHERE `id` = ?
-                ",
-                self.id
-            )
-            .execute(pool)
-            .await
-            .expect(&format!("Could not delete Reminder {}", self.id));
+            self.force_delete(pool).await;
         }
     }
 
+    async fn force_delete(&self, pool: &MySqlPool) {
+        sqlx::query!(
+            "
+DELETE FROM reminders WHERE `id` = ?
+            ",
+            self.id
+        )
+        .execute(pool)
+        .await
+        .expect(&format!("Could not delete Reminder {}", self.id));
+    }
+
     pub async fn send(&self, pool: &MySqlPool, http: &Http) {
-        async fn send_to_channel(http: &Http, reminder: &Reminder, embed: Option<CreateEmbed>) {
+        async fn send_to_channel(
+            http: &Http,
+            reminder: &Reminder,
+            embed: Option<CreateEmbed>,
+        ) -> Result<()> {
             let channel = ChannelId(reminder.channel_id);
 
-            let result = channel
+            channel
                 .send_message(&http, |m| {
                     m.content(&reminder.content).tts(reminder.tts);
 
@@ -246,14 +255,8 @@ DELETE FROM reminders WHERE `id` = ?
 
                     m
                 })
-                .await;
-
-            if let Err(e) = result {
-                error!(
-                    "Could not send Reminder to ChannelId: {:?}: {:?}",
-                    &reminder, e
-                );
-            }
+                .await
+                .map(|_| ())
         }
 
         async fn send_to_webhook(
@@ -261,8 +264,8 @@ DELETE FROM reminders WHERE `id` = ?
             reminder: &Reminder,
             webhook: Webhook,
             embed: Option<CreateEmbed>,
-        ) {
-            let result = webhook
+        ) -> Result<()> {
+            webhook
                 .execute(&http, false, |w| {
                     w.content(&reminder.content).tts(reminder.tts);
 
@@ -289,14 +292,8 @@ DELETE FROM reminders WHERE `id` = ?
 
                     w
                 })
-                .await;
-
-            if let Err(e) = result {
-                error!(
-                    "Could not send Reminder to Webhook: {:?}: {:?}",
-                    &reminder, e
-                );
-            }
+                .await
+                .map(|_| ())
         }
 
         if !(self.channel_paused
@@ -319,25 +316,38 @@ UPDATE `channels` SET paused = 0, paused_until = NULL WHERE `channel` = ?
                 None
             };
 
-            if let (Some(webhook_id), Some(webhook_token)) = (self.webhook_id, &self.webhook_token)
+            let result = if let (Some(webhook_id), Some(webhook_token)) =
+                (self.webhook_id, &self.webhook_token)
             {
                 let webhook_res = http.get_webhook_with_token(webhook_id, webhook_token).await;
 
                 if let Ok(webhook) = webhook_res {
-                    send_to_webhook(http, &self, webhook, embed).await;
+                    send_to_webhook(http, &self, webhook, embed).await
                 } else {
                     warn!("Webhook vanished: {:?}", webhook_res);
 
                     self.reset_webhook(&pool.clone()).await;
-                    send_to_channel(http, &self, embed).await;
+                    send_to_channel(http, &self, embed).await
                 }
             } else {
-                send_to_channel(http, &self, embed).await;
+                send_to_channel(http, &self, embed).await
+            };
+
+            match result {
+                Ok(()) => {
+                    self.refresh(pool).await;
+                }
+
+                Err(e) => {
+                    error!("Error sending {:?}: {:?}", self, e);
+
+                    self.force_delete(pool).await;
+                }
             }
         } else {
             info!("Reminder {} is paused", self.id);
-        }
 
-        self.refresh(pool).await;
+            self.refresh(pool).await;
+        }
     }
 }
