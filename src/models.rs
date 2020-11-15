@@ -4,11 +4,12 @@ use serenity::{
     builder::CreateEmbed,
     http::Http,
     model::{channel::Embed as SerenityEmbed, id::ChannelId, webhook::Webhook},
-    Result,
+    Error, Result,
 };
 
 use log::{error, info, warn};
 
+use serenity::http::StatusCode;
 use sqlx::types::chrono::{NaiveDateTime, Utc};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -333,16 +334,21 @@ UPDATE `channels` SET paused = 0, paused_until = NULL WHERE `channel` = ?
                 send_to_channel(http, &self, embed).await
             };
 
-            match result {
-                Ok(()) => {
+            if let Err(e) = result {
+                error!("Error sending {:?}: {:?}", self, e);
+
+                if let Error::Http(error) = e {
+                    if error.status_code() == Some(StatusCode::from_u16(404).unwrap()) {
+                        error!("Seeing channel is deleted. Removing reminder");
+                        self.force_delete(pool).await;
+                    } else {
+                        self.refresh(pool).await;
+                    }
+                } else {
                     self.refresh(pool).await;
                 }
-
-                Err(e) => {
-                    error!("Error sending {:?}: {:?}", self, e);
-
-                    self.force_delete(pool).await;
-                }
+            } else {
+                self.refresh(pool).await;
             }
         } else {
             info!("Reminder {} is paused", self.id);
