@@ -22,8 +22,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .collect::<Vec<String>>()
         .contains(&"--dry-run".to_string());
 
-    println!("dry-run: {}", dry_run);
-
     let interval = env::var("INTERVAL")
         .map(|inner| inner.parse::<u64>().ok())
         .ok()
@@ -34,10 +32,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             10
         });
 
-    let pool =
-        MySqlPool::new(&env::var("DATABASE_URL").expect("Missing DATABASE_URL from environment"))
-            .await
-            .unwrap();
+    info!("dry-run: {}", dry_run);
+    info!("interval: {}", interval);
+
+    let pool = MySqlPool::connect(
+        &env::var("DATABASE_URL").expect("Missing DATABASE_URL from environment"),
+    )
+    .await
+    .unwrap();
 
     let token = &env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN not provided in environment");
 
@@ -59,8 +61,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     info!("(( dry run; nothing sent ))");
                 }
             }
-
-            tokio::time::delay_for(Duration::from_secs(interval)).await;
         }
+
+        tokio::time::delay_for(Duration::from_secs(interval)).await;
     }
 }

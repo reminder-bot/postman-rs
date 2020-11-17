@@ -8,7 +8,7 @@ edition = "2018"
 dotenv = "0.15"
 serenity = { git = "https://github.com/jellywx/serenity", branch = "jellywx-webhook_files", default-features = false, features = ["http", "model", "rustls_backend"] }
 tokio = { version = "0.2" }
-sqlx = { version = "0.3", default-features = false, features = ["runtime-tokio", "macros", "mysql", "chrono"] }
+sqlx = { version = "0.4", default-features = false, features = ["runtime-tokio-rustls", "macros", "mysql", "chrono"] }
 log = "0.4"
 env_logger = "0.8"
 serde_json = "1.0.59"
