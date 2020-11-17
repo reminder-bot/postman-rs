@@ -18,6 +18,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     dotenv()?;
 
+    let dry_run = env::args()
+        .collect::<Vec<String>>()
+        .contains(&"--dry-run".to_string());
+
+    println!("dry-run: {}", dry_run);
+
     let interval = env::var("INTERVAL")
         .map(|inner| inner.parse::<u64>().ok())
         .ok()
@@ -47,7 +53,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             for reminder in reminders {
                 info!("Sending {:?}", reminder);
 
-                reminder.send(&pool, &http).await;
+                if !dry_run {
+                    reminder.send(&pool, &http).await;
+                } else {
+                    info!("(( dry run; nothing sent ))");
+                }
             }
 
             tokio::time::delay_for(Duration::from_secs(interval)).await;
