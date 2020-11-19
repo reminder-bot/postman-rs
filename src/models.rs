@@ -123,6 +123,7 @@ pub struct Reminder {
 
     channel_paused: bool,
     channel_paused_until: Option<NaiveDateTime>,
+    enabled: bool,
 
     content: String,
     tts: bool,
@@ -151,6 +152,7 @@ SELECT
 
     channels.`paused` AS channel_paused,
     channels.`paused_until` AS channel_paused_until,
+    reminders.`enabled` AS enabled,
 
     messages.`content` AS content,
     messages.`tts` AS tts,
@@ -297,10 +299,11 @@ DELETE FROM reminders WHERE `id` = ?
                 .map(|_| ())
         }
 
-        if !(self.channel_paused
-            && self
-                .channel_paused_until
-                .map_or(true, |inner| inner >= Utc::now().naive_local()))
+        if self.enabled
+            && !(self.channel_paused
+                && self
+                    .channel_paused_until
+                    .map_or(true, |inner| inner >= Utc::now().naive_local()))
         {
             let _ = sqlx::query!(
                 "
