@@ -14,7 +14,7 @@ use serenity::http::StatusCode;
 use sqlx::types::chrono::{NaiveDateTime, Utc};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::duration_fmt::{longhand_displacement, shorthand_displacement};
+use crate::duration_fmt::fmt_displacement;
 
 lazy_static! {
     pub static ref TIMEFROM_REGEX: Regex =
@@ -210,11 +210,7 @@ WHERE
                         }
                     };
 
-                    if format == "long" {
-                        longhand_displacement(difference.num_seconds() as u64)
-                    } else {
-                        shorthand_displacement(difference.num_seconds() as u64)
-                    }
+                    fmt_displacement(format, difference.num_seconds() as u64)
                 } else {
                     String::new()
                 }
