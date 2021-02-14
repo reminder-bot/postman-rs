@@ -9,9 +9,17 @@ use serenity::{
 
 use log::{error, info, warn};
 
+use regex::{Captures, Regex};
 use serenity::http::StatusCode;
 use sqlx::types::chrono::{NaiveDateTime, Utc};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::duration_fmt::{longhand_displacement, shorthand_displacement};
+
+lazy_static! {
+    pub static ref TIMEFROM_REGEX: Regex =
+        Regex::new(r#"<<timefrom:(?P<time>\d+):(?P<format>.+)?>>"#).unwrap();
+}
 
 struct Embed {
     inner: EmbedInner,
@@ -131,8 +139,9 @@ pub struct Reminder {
     attachment: Option<Vec<u8>>,
     attachment_name: Option<String>,
 
-    interval: Option<u32>,
     time: u32,
+    expires: Option<NaiveDateTime>,
+    interval: Option<u32>,
 
     avatar: Option<String>,
     username: Option<String>,
@@ -160,8 +169,9 @@ SELECT
     messages.`attachment` AS attachment,
     messages.`attachment_name` AS attachment_name,
 
-    reminders.`interval` AS 'interval',
     reminders.`time` AS time,
+    reminders.`expires` AS expires,
+    reminders.`interval` AS 'interval',
 
     reminders.`avatar` AS avatar,
     reminders.`username` AS username
@@ -182,6 +192,39 @@ WHERE
         .fetch_all(pool)
         .await
         .unwrap()
+        .into_iter()
+        .map(|mut rem| {
+            let new_content = TIMEFROM_REGEX.replace(&rem.content, |caps: &Captures| {
+                let final_time = caps.name("time").unwrap().as_str();
+                let format = caps.name("format").unwrap().as_str();
+
+                if let Ok(final_time) = final_time.parse::<i64>() {
+                    let dt = NaiveDateTime::from_timestamp(final_time, 0);
+                    let now = Utc::now().naive_utc();
+
+                    let difference = {
+                        if now < dt {
+                            dt - Utc::now().naive_utc()
+                        } else {
+                            Utc::now().naive_utc() - dt
+                        }
+                    };
+
+                    if format == "long" {
+                        longhand_displacement(difference.num_seconds() as u64)
+                    } else {
+                        shorthand_displacement(difference.num_seconds() as u64)
+                    }
+                } else {
+                    String::new()
+                }
+            });
+
+            rem.content = new_content.to_string();
+
+            rem
+        })
+        .collect::<Vec<Self>>()
     }
 
     async fn reset_webhook(&self, pool: &MySqlPool) {
@@ -207,16 +250,22 @@ UPDATE channels SET webhook_id = NULL, webhook_token = NULL WHERE channel = ?
                 updated_reminder_time += interval;
             }
 
-            sqlx::query!(
-                "
+            if self.expires.map_or(false, |expires| {
+                NaiveDateTime::from_timestamp(updated_reminder_time as i64, 0) > expires
+            }) {
+                self.force_delete(pool).await;
+            } else {
+                sqlx::query!(
+                    "
 UPDATE reminders SET `time` = ? WHERE `id` = ?
-                ",
-                updated_reminder_time,
-                self.id
-            )
-            .execute(pool)
-            .await
-            .expect(&format!("Could not update time on Reminder {}", self.id));
+                    ",
+                    updated_reminder_time,
+                    self.id
+                )
+                .execute(pool)
+                .await
+                .expect(&format!("Could not update time on Reminder {}", self.id));
+            }
         } else {
             self.force_delete(pool).await;
         }

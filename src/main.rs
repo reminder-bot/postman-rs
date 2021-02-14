@@ -1,3 +1,7 @@
+#[macro_use]
+extern crate lazy_static;
+
+mod duration_fmt;
 mod models;
 
 use log::info;
@@ -63,6 +67,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         }
 
-        tokio::time::delay_for(Duration::from_secs(interval)).await;
+        tokio::time::sleep(Duration::from_secs(interval)).await;
     }
 }
