@@ -9,17 +9,11 @@ use serenity::{
 
 use log::{error, info, warn};
 
-use regex::{Captures, Regex};
 use serenity::http::StatusCode;
 use sqlx::types::chrono::{NaiveDateTime, Utc};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::duration_fmt::fmt_displacement;
-
-lazy_static! {
-    pub static ref TIMEFROM_REGEX: Regex =
-        Regex::new(r#"<<timefrom:(?P<time>\d+):(?P<format>.+)?>>"#).unwrap();
-}
+use crate::substitutions::substitute;
 
 struct Embed {
     inner: EmbedInner,
@@ -44,7 +38,7 @@ struct EmbedField {
 
 impl Embed {
     pub async fn from_id(pool: &MySqlPool, id: u32) -> Self {
-        let inner = sqlx::query_as_unchecked!(
+        let mut inner = sqlx::query_as_unchecked!(
             EmbedInner,
             "
 SELECT
@@ -66,7 +60,11 @@ WHERE
         .await
         .unwrap();
 
-        let fields = sqlx::query_as_unchecked!(
+        inner.title = substitute(&inner.title);
+        inner.description = substitute(&inner.description);
+        inner.footer = substitute(&inner.footer);
+
+        let mut fields = sqlx::query_as_unchecked!(
             EmbedField,
             "
 SELECT
@@ -83,6 +81,11 @@ WHERE
         .fetch_all(pool)
         .await
         .unwrap();
+
+        fields.iter_mut().for_each(|mut field| {
+            field.title = substitute(&field.title);
+            field.value = substitute(&field.value);
+        });
 
         Embed { inner, fields }
     }
@@ -194,29 +197,7 @@ WHERE
         .unwrap()
         .into_iter()
         .map(|mut rem| {
-            let new_content = TIMEFROM_REGEX.replace(&rem.content, |caps: &Captures| {
-                let final_time = caps.name("time").unwrap().as_str();
-                let format = caps.name("format").unwrap().as_str();
-
-                if let Ok(final_time) = final_time.parse::<i64>() {
-                    let dt = NaiveDateTime::from_timestamp(final_time, 0);
-                    let now = Utc::now().naive_utc();
-
-                    let difference = {
-                        if now < dt {
-                            dt - Utc::now().naive_utc()
-                        } else {
-                            Utc::now().naive_utc() - dt
-                        }
-                    };
-
-                    fmt_displacement(format, difference.num_seconds() as u64)
-                } else {
-                    String::new()
-                }
-            });
-
-            rem.content = new_content.to_string();
+            rem.content = substitute(&rem.content);
 
             rem
         })

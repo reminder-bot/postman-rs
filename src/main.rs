@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate lazy_static;
 
-mod duration_fmt;
 mod models;
+mod substitutions;
 
 use log::info;
 
