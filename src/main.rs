@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 info!("Sending {:?}", reminder);
 
                 if !dry_run {
-                    reminder.send(&pool, &http).await;
+                    tokio::spawn(reminder.send(&pool, &http)).await;
                 } else {
                     info!("(( dry run; nothing sent ))");
                 }

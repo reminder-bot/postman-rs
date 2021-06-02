@@ -11,9 +11,10 @@ use log::{error, info, warn};
 
 use serenity::http::StatusCode;
 use sqlx::types::chrono::{NaiveDateTime, Utc};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::substitutions::substitute;
+use chrono::Duration;
+use serenity::model::channel::Message;
 
 struct Embed {
     inner: EmbedInner,
@@ -26,7 +27,9 @@ struct EmbedInner {
     image_url: Option<String>,
     thumbnail_url: Option<String>,
     footer: String,
-    footer_icon: Option<String>,
+    footer_url: Option<String>,
+    author: String,
+    author_url: Option<String>,
     color: u32,
 }
 
@@ -37,22 +40,24 @@ struct EmbedField {
 }
 
 impl Embed {
-    pub async fn from_id(pool: &MySqlPool, id: u32) -> Self {
+    pub async fn from_id(pool: &MySqlPool, id: u32) -> Option<Self> {
         let mut inner = sqlx::query_as_unchecked!(
             EmbedInner,
             "
 SELECT
-    title,
-    description,
-    image_url,
-    thumbnail_url,
-    footer,
-    footer_icon,
-    color
+    `embed_title` AS title,
+    `embed_description` AS description,
+    `embed_image_url` AS image_url,
+    `embed_thumbnail_url` AS thumbnail_url,
+    `embed_footer` AS footer,
+    `embed_footer_url` AS footer_url,
+    `embed_author` AS author,
+    `embed_author_url` AS author_url,
+    `embed_color` AS color
 FROM
-    embeds
+    reminders
 WHERE
-    embeds.`id` = ?
+    `id` = ?
             ",
             id
         )
@@ -74,7 +79,7 @@ SELECT
 FROM
     embed_fields
 WHERE
-    embed_id = ?
+    reminder_id = ?
             ",
             id
         )
@@ -87,7 +92,26 @@ WHERE
             field.value = substitute(&field.value);
         });
 
-        Embed { inner, fields }
+        let e = Embed { inner, fields };
+
+        if e.has_content() {
+            Some(e)
+        } else {
+            None
+        }
+    }
+
+    pub fn has_content(&self) -> bool {
+        if self.inner.description.is_empty()
+            && self.inner.title.is_empty()
+            && self.inner.footer.is_empty()
+            && self.inner.author.is_empty()
+            && self.fields.is_empty()
+        {
+            false
+        } else {
+            true
+        }
     }
 }
 
@@ -98,10 +122,19 @@ impl Into<CreateEmbed> for Embed {
         c.title(&self.inner.title)
             .description(&self.inner.description)
             .color(self.inner.color)
+            .author(|a| {
+                a.name(&self.inner.author);
+
+                if let Some(author_icon) = &self.inner.author_url {
+                    a.icon_url(author_icon);
+                }
+
+                a
+            })
             .footer(|f| {
                 f.text(&self.inner.footer);
 
-                if let Some(footer_icon) = &self.inner.footer_icon {
+                if let Some(footer_icon) = &self.inner.footer_url {
                     f.icon_url(footer_icon);
                 }
 
@@ -136,13 +169,15 @@ pub struct Reminder {
     channel_paused_until: Option<NaiveDateTime>,
     enabled: bool,
 
-    content: String,
     tts: bool,
-    embed_id: Option<u32>,
+    pin: bool,
+    content: String,
     attachment: Option<Vec<u8>>,
     attachment_name: Option<String>,
 
-    time: u32,
+    utc_time: NaiveDateTime,
+    timezone: String,
+    restartable: bool,
     expires: Option<NaiveDateTime>,
     interval: Option<u32>,
 
@@ -166,13 +201,15 @@ SELECT
     channels.`paused_until` AS channel_paused_until,
     reminders.`enabled` AS enabled,
 
-    messages.`content` AS content,
-    messages.`tts` AS tts,
-    messages.`embed_id` AS embed_id,
-    messages.`attachment` AS attachment,
-    messages.`attachment_name` AS attachment_name,
+    reminders.`tts` AS tts,
+    reminders.`pin` AS pin,
+    reminders.`content` AS content,
+    reminders.`attachment` AS attachment,
+    reminders.`attachment_name` AS attachment_name,
 
-    reminders.`time` AS time,
+    reminders.`utc_time` AS 'utc_time',
+    reminders.`timezone` AS timezone,
+    reminders.`restartable` AS restartable,
     reminders.`expires` AS expires,
     reminders.`interval` AS 'interval',
 
@@ -184,12 +221,8 @@ INNER JOIN
     channels
 ON
     reminders.channel_id = channels.id
-INNER JOIN
-    messages
-ON
-    reminders.message_id = messages.id
 WHERE
-    reminders.`time` < UNIX_TIMESTAMP()
+    reminders.`utc_time` < NOW()
             "
         )
         .fetch_all(pool)
@@ -217,24 +250,21 @@ UPDATE channels SET webhook_id = NULL, webhook_token = NULL WHERE channel = ?
 
     async fn refresh(&self, pool: &MySqlPool) {
         if let Some(interval) = self.interval {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as u32;
-            let mut updated_reminder_time = self.time;
+            let now = Utc::now().naive_local();
+            let mut updated_reminder_time = self.utc_time;
 
             while updated_reminder_time < now {
-                updated_reminder_time += interval;
+                updated_reminder_time += Duration::seconds(interval as i64);
             }
 
             if self.expires.map_or(false, |expires| {
-                NaiveDateTime::from_timestamp(updated_reminder_time as i64, 0) > expires
+                NaiveDateTime::from_timestamp(updated_reminder_time.timestamp(), 0) > expires
             }) {
                 self.force_delete(pool).await;
             } else {
                 sqlx::query!(
                     "
-UPDATE reminders SET `time` = ? WHERE `id` = ?
+UPDATE reminders SET `utc_time` = ? WHERE `id` = ?
                     ",
                     updated_reminder_time,
                     self.id
@@ -260,6 +290,10 @@ DELETE FROM reminders WHERE `id` = ?
         .expect(&format!("Could not delete Reminder {}", self.id));
     }
 
+    async fn pin_message<M: Into<u64>>(&self, message_id: M, http: &Http) {
+        let _ = http.pin_message(self.channel_id, message_id.into()).await;
+    }
+
     pub async fn send(&self, pool: &MySqlPool, http: &Http) {
         async fn send_to_channel(
             http: &Http,
@@ -268,7 +302,7 @@ DELETE FROM reminders WHERE `id` = ?
         ) -> Result<()> {
             let channel = ChannelId(reminder.channel_id);
 
-            channel
+            match channel
                 .send_message(&http, |m| {
                     m.content(&reminder.content).tts(reminder.tts);
 
@@ -285,7 +319,16 @@ DELETE FROM reminders WHERE `id` = ?
                     m
                 })
                 .await
-                .map(|_| ())
+            {
+                Ok(m) => {
+                    if reminder.pin {
+                        reminder.pin_message(m.id, http).await;
+                    }
+
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
         }
 
         async fn send_to_webhook(
@@ -294,8 +337,8 @@ DELETE FROM reminders WHERE `id` = ?
             webhook: Webhook,
             embed: Option<CreateEmbed>,
         ) -> Result<()> {
-            webhook
-                .execute(&http, false, |w| {
+            match webhook
+                .execute(&http, reminder.pin || reminder.restartable, |w| {
                     w.content(&reminder.content).tts(reminder.tts);
 
                     if let Some(username) = &reminder.username {
@@ -322,7 +365,18 @@ DELETE FROM reminders WHERE `id` = ?
                     w
                 })
                 .await
-                .map(|_| ())
+            {
+                Ok(m) => {
+                    if reminder.pin {
+                        if let Some(message) = m {
+                            reminder.pin_message(message.id, http).await;
+                        }
+                    }
+
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
         }
 
         if self.enabled
@@ -340,11 +394,9 @@ UPDATE `channels` SET paused = 0, paused_until = NULL WHERE `channel` = ?
             .execute(&pool.clone())
             .await;
 
-            let embed = if let Some(id) = self.embed_id {
-                Some(Embed::from_id(&pool.clone(), id).await.into())
-            } else {
-                None
-            };
+            let embed = Embed::from_id(&pool.clone(), self.id)
+                .await
+                .map(|e| e.into());
 
             let result = if let (Some(webhook_id), Some(webhook_token)) =
                 (self.webhook_id, &self.webhook_token)
