@@ -4,7 +4,7 @@ extern crate lazy_static;
 mod models;
 mod substitutions;
 
-use log::info;
+use log::{info, warn};
 
 use sqlx::MySqlPool;
 
@@ -12,8 +12,7 @@ use serenity::http::Http;
 
 use dotenv::dotenv;
 
-use log::warn;
-
+use std::sync::Arc;
 use std::{env, time::Duration};
 
 #[tokio::main]
@@ -49,6 +48,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let http = Http::new_with_token(&token);
 
+    let arc = Arc::new(http);
+
     loop {
         let reminders = models::Reminder::fetch_reminders(&pool).await;
 
@@ -60,7 +61,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 info!("Sending {:?}", reminder);
 
                 if !dry_run {
-                    tokio::spawn(reminder.send(&pool, &http)).await;
+                    let pool_clone = pool.clone();
+                    let http_clone = arc.clone();
+
+                    let res = tokio::spawn(async move {
+                        reminder.send(pool_clone, http_clone).await;
+                    })
+                    .await;
+
+                    if let Err(e) = res {
+                        println!("Error spawning sender: {:?}", e);
+                    }
                 } else {
                     info!("(( dry run; nothing sent ))");
                 }

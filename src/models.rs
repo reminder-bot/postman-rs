@@ -14,7 +14,7 @@ use sqlx::types::chrono::{NaiveDateTime, Utc};
 
 use crate::substitutions::substitute;
 use chrono::Duration;
-use serenity::model::channel::Message;
+use std::sync::Arc;
 
 struct Embed {
     inner: EmbedInner,
@@ -102,10 +102,14 @@ WHERE
     }
 
     pub fn has_content(&self) -> bool {
-        if self.inner.description.is_empty()
-            && self.inner.title.is_empty()
+        if self.inner.title.is_empty()
+            && self.inner.description.is_empty()
+            && self.inner.image_url.is_none()
+            && self.inner.thumbnail_url.is_none()
             && self.inner.footer.is_empty()
+            && self.inner.footer_url.is_none()
             && self.inner.author.is_empty()
+            && self.inner.author_url.is_none()
             && self.fields.is_empty()
         {
             false
@@ -290,13 +294,13 @@ DELETE FROM reminders WHERE `id` = ?
         .expect(&format!("Could not delete Reminder {}", self.id));
     }
 
-    async fn pin_message<M: Into<u64>>(&self, message_id: M, http: &Http) {
+    async fn pin_message<M: Into<u64>>(&self, message_id: M, http: Arc<Http>) {
         let _ = http.pin_message(self.channel_id, message_id.into()).await;
     }
 
-    pub async fn send(&self, pool: &MySqlPool, http: &Http) {
+    pub async fn send(&self, pool: MySqlPool, http: Arc<Http>) {
         async fn send_to_channel(
-            http: &Http,
+            http: Arc<Http>,
             reminder: &Reminder,
             embed: Option<CreateEmbed>,
         ) -> Result<()> {
@@ -332,7 +336,7 @@ DELETE FROM reminders WHERE `id` = ?
         }
 
         async fn send_to_webhook(
-            http: &Http,
+            http: Arc<Http>,
             reminder: &Reminder,
             webhook: Webhook,
             embed: Option<CreateEmbed>,
@@ -421,20 +425,20 @@ UPDATE `channels` SET paused = 0, paused_until = NULL WHERE `channel` = ?
                 if let Error::Http(error) = e {
                     if error.status_code() == Some(StatusCode::from_u16(404).unwrap()) {
                         error!("Seeing channel is deleted. Removing reminder");
-                        self.force_delete(pool).await;
+                        self.force_delete(&pool).await;
                     } else {
-                        self.refresh(pool).await;
+                        self.refresh(&pool).await;
                     }
                 } else {
-                    self.refresh(pool).await;
+                    self.refresh(&pool).await;
                 }
             } else {
-                self.refresh(pool).await;
+                self.refresh(&pool).await;
             }
         } else {
             info!("Reminder {} is paused", self.id);
 
-            self.refresh(pool).await;
+            self.refresh(&pool).await;
         }
     }
 }
