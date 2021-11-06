@@ -66,14 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     let pool_clone = pool.clone();
                     let http_clone = arc.clone();
 
-                    let res = tokio::spawn(async move {
-                        reminder.send(pool_clone, http_clone).await;
-                    })
-                    .await;
-
-                    if let Err(e) = res {
-                        println!("Error spawning sender: {:?}", e);
-                    }
+                    reminder.send(pool_clone, http_clone).await;
                 } else {
                     info!("(( dry run; nothing sent ))");
                 }
