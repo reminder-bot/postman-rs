@@ -14,6 +14,7 @@ use dotenv::dotenv;
 
 use std::sync::Arc;
 use std::{env, time::Duration};
+use tokio::time::Instant;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -51,6 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let arc = Arc::new(http);
 
     loop {
+        let sleep_until = Instant::now() + Duration::from_secs(interval);
         let reminders = models::Reminder::fetch_reminders(&pool).await;
 
         if reminders.len() > 0 {
@@ -78,6 +80,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         }
 
-        tokio::time::sleep(Duration::from_secs(interval)).await;
+        tokio::time::sleep_until(sleep_until).await;
     }
 }
