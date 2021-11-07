@@ -190,7 +190,7 @@ pub struct Reminder {
 }
 
 impl Reminder {
-    pub async fn fetch_reminders(pool: &MySqlPool) -> Vec<Self> {
+    pub async fn fetch_reminders(pool: &MySqlPool, instances: u64, instance: u64) -> Vec<Self> {
         sqlx::query_as_unchecked!(
             Reminder,
             "
@@ -226,8 +226,10 @@ INNER JOIN
 ON
     reminders.channel_id = channels.id
 WHERE
-    reminders.`utc_time` < NOW()
-            "
+    reminders.`utc_time` < NOW() AND MOD(reminders.`id`, ?) = ?
+            ",
+            instances,
+            instance
         )
         .fetch_all(pool)
         .await
