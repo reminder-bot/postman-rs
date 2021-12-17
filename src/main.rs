@@ -22,10 +22,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     dotenv()?;
 
-    let dry_run = env::args()
-        .collect::<Vec<String>>()
-        .contains(&"--dry-run".to_string());
-
     let interval = env::var("INTERVAL")
         .map(|inner| inner.parse::<u64>().ok())
         .ok()
@@ -36,21 +32,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             10
         });
 
-    //let bind_address = env::var("BIND_ADDR").ok();
-    let instances = env::var("INSTANCES")
-        .map(|inner| inner.parse::<u64>().ok())
-        .ok()
-        .flatten()
-        .unwrap_or(1);
-    let instance = env::var("INSTANCE")
-        .map(|inner| inner.parse::<u64>().ok())
-        .ok()
-        .flatten()
-        .unwrap_or(0);
-
     info!("dry-run: {}", dry_run);
     info!("interval: {}", interval);
-    info!("instance/instances: {}/{}", instance, instances);
 
     let pool = MySqlPool::connect(
         &env::var("DATABASE_URL").expect("Missing DATABASE_URL from environment"),
@@ -66,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     loop {
         let sleep_until = Instant::now() + Duration::from_secs(interval);
-        let reminders = models::Reminder::fetch_reminders(&pool, instances, instance).await;
+        let reminders = models::Reminder::fetch_reminders(&pool).await;
 
         if reminders.len() > 0 {
             info!("=================================================");
@@ -76,10 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 info!("Sending {:?}", reminder);
 
                 if !dry_run {
-                    let pool_clone = pool.clone();
-                    let http_clone = arc.clone();
-
-                    reminder.send(pool_clone, http_clone).await;
+                    reminder.send(pool.clone(), http.clone()).await;
                 } else {
                     info!("(( dry run; nothing sent ))");
                 }
